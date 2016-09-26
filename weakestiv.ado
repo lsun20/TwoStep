@@ -622,7 +622,9 @@ di as err "Fixed-effects estimation requires data to be -xtset-"
 
 * Misc
 	local npd=0
-
+	
+	compute_a_min,nendog(`nendog') nexexog(`nexexog') alpha(`k_level') gamma(`k_w_level')
+	local a_min = `r(a_min)'
 
 ******************************** CUE point estimator if requested **************************
 	if `cuepoint' {
@@ -883,6 +885,7 @@ di as err "error: number of weakly endogenous (`nwendog') doesn't match number o
 										`lm',				///
 										`nendog',			///
 										`nexexog',			///
+										`a_min',			/// coefficient in the linear combination of K_2sls and J
 										"`del_z'",			/// row vector
 										"`var_del'",		///
 										"`pi_z'",			///
@@ -932,6 +935,7 @@ di as err "error: number of weakly endogenous (`nwendog') doesn't match number o
 										`lm',				///
 										`nendog',			///
 										`nexexog',			///
+										`a_min',			/// coeff in linear combination of K_2sls and J
 										"`del_z'",			/// row vector
 										"`var_del'",		///
 										"`pi_z'",			///
@@ -967,6 +971,7 @@ di as err "error: number of weakly endogenous (`nwendog') doesn't match number o
 					nendog(`nendog')			///
 					nsendog(`nsendog')			///
 					ncsendog(`ncsendog')		///
+					a_min(`a_min')			///
 					ar_level(`ar_level')		///
 					k_level(`k_level')			///
 					k_w_level(`k_w_level')			///
@@ -1077,6 +1082,7 @@ di as err "         weakiv rk stat df=`rk_df'; ranktest id stat df=`idstat_df'
 			nwendog(`nwendog')			///
 			nsendog(`nsendog')			///
 			ncsendog(`ncsendog')		///
+			a_min(`a_min')			///
 			overid(`overid')			///
 			kwt(`kwt')					///
 			nobs(`N')					///
@@ -1215,7 +1221,7 @@ di as err "         weakiv rk stat df=`rk_df'; ranktest id stat df=`idstat_df'
 				wald_level(`wald_level')
 
 			local p`vnum'citable_cnames		"`r(cnames)'"
-				
+
 			get_ci_from_table,						///
 				testlist(`ptestlist')				/// if wald is in ptestlist, CI will be projection-based
 				citable(`p`vnum'citable')			/// pass the projection-based table for variable `vnum'
@@ -1298,6 +1304,7 @@ di as err "         weakiv rk stat df=`rk_df'; ranktest id stat df=`idstat_df'
 	ereturn scalar	sendo_ct			=`nsendog'		//  #strong endog
 	ereturn scalar	tinexog_ct			=`ntinexog'		//  #exogenous regressors included in tests
 	ereturn scalar	exexog_ct			=`nexexog'		//  #excluded exogenous (IVs)
+	ereturn scalar  a_min				=`a_min'		// coeff in linear combination of K and J
 	ereturn local	cmd 				"weakiv"
 	ereturn local	waldcmd				"`waldcmd'"
 	ereturn local	depvar				"`depvar'"
@@ -1378,7 +1385,7 @@ di as err "         weakiv rk stat df=`rk_df'; ranktest id stat df=`idstat_df'
 			ereturn local	kj_cset		"`kj_cset'"
 			ereturn local	j_cset		"`j_cset'"
 			ereturn local	k_cset		"`k_cset'"
-			ereturn local	k_w_cset		"`k_w_cset'"
+			ereturn local	k_w_cset	"`k_w_cset'"
 			ereturn local	clr_cset	"`clr_cset'"
 		}
 	}
@@ -1407,6 +1414,7 @@ di as err "         weakiv rk stat df=`rk_df'; ranktest id stat df=`idstat_df'
 				ereturn local p`vnum'_kj_cset			"`p`vnum'_kj_cset'"
 				ereturn local p`vnum'_j_cset			"`p`vnum'_j_cset'"
 				ereturn local p`vnum'_k_cset			"`p`vnum'_k_cset'"
+				ereturn local p`vnum'_k_w_cset			"`p`vnum'_k_w_cset'"
 				ereturn local p`vnum'_clr_cset			"`p`vnum'_clr_cset'"
 			}
 		}
@@ -2170,7 +2178,7 @@ program define display_output
 	local name_clr		: di "{txt}{ralign 5:{helpb weakiv##CLR:CLR}}"
 	local name_ar		: di "{txt}{ralign 5:{helpb weakiv##AR:AR}}"
 	local name_k		: di "{txt}{ralign 5:{helpb weakiv##K:K}}"
-	local name_k_w		: di "{txt}{ralign 5:robust K}"
+	local name_k_w		: di "{txt}{ralign 5:K_2sls}"
 	local name_j		: di "{txt}{ralign 5:{helpb weakiv##J:J}}"
 	local name_kj		: di "{txt}{ralign 5:{helpb weakiv##K-J:K-J}}"
 	local name_wald		: di "{txt}{ralign 5:{helpb weakiv##Wald:Wald}}"
@@ -2205,6 +2213,7 @@ program define display_output
 		local ci_j			: di " {c |}{center 15:`level_j'}{res}{center 22:(*)}"
 	}
 	foreach testname in clr ar k k_w j kj wald {
+	
 		local cset		"`e(`testname'_cset)'"
 		local csetlen	: length local cset
 		if `csetlen' <= 22 {
@@ -4645,7 +4654,7 @@ di as err "error: missing saved grid e(citable)"
 			ereturn local	kj_cset			"`kj_cset'"
 			ereturn local	j_cset			"`j_cset'"
 			ereturn local	k_cset			"`k_cset'"
-			ereturn local	k_w_cset			"`k_w_cset'"
+			ereturn local	k_w_cset		"`k_w_cset'"
 			ereturn local	clr_cset		"`clr_cset'"
 			ereturn scalar	kjj_level		=`kjj_level'
 			ereturn scalar	kjk_level		=`kjk_level'
@@ -4660,7 +4669,6 @@ di as err "error: missing saved grid e(citable)"
 ***************** End new CIs ***********************************
 
 ************** 1-D projection-based inference *******************
-
 	if "`project'"~="" {
 
 		if e(wendo_ct)==1 {
@@ -4700,7 +4708,7 @@ di as err "syntax error - variable listed in project(.) but not in endogenous"
 		local gridpoints	"`e(gridpoints)'"
 
 		foreach vname of local pwendo {									//  loop through all vars to project
-		
+		display "`vname'"
 			local vnum			: list posof "`vname'" in wendo
 			local pwendo_nlist	"`pwendo_nlist' `vnum'"
 			
@@ -5383,6 +5391,7 @@ program define construct_citable, rclass						//  recursive approach
 				nwendog(integer 0)		///
 				nsendog(integer 0)		///
 				ncsendog(integer 0)		///
+				a_min(real 0)			///
 				overid(integer 0)		///
 				alpha(real 0)			///
 				kwt(real 0)				///
@@ -5463,6 +5472,7 @@ program define construct_citable, rclass						//  recursive approach
 						nwendog(`nwendog')			///
 						nsendog(`nsendog')			///
 						ncsendog(`ncsendog')		///
+						a_min(`a_min')				///
 						overid(`overid')			///
 						kwt(`kwt')					///
 						nobs(`nobs')				///
@@ -5530,6 +5540,7 @@ program grid_recurse, rclass
 				nwendog(integer 0)		///
 				nsendog(integer 0)		///
 				ncsendog(integer 0)		///
+				a_min(real 0)			///
 				overid(integer 0)		///
 				kwt(real 0)				///
 				nobs(real 0)			///
@@ -5612,6 +5623,7 @@ program grid_recurse, rclass
 							nwendog(`nwendog')			///
 							nsendog(`nsendog')			///
 							ncsendog(`ncsendog')		///
+							a_min(`a_min')   			///
 							overid(`overid')			///
 							kwt(`kwt')					///
 							nobs(`nobs')				///
@@ -5764,6 +5776,7 @@ program grid_recurse, rclass
 										`lm',					///
 										`nendog',				///
 										`nexexog',				///
+										`a_min',			/// coeff in linear combination of K_2sls and J
 										"`del_z'",				/// row vector
 										"`var_del'",			///
 										"`pi_z'",				///
@@ -5787,6 +5800,7 @@ program grid_recurse, rclass
 										`lm',					///
 										`nendog',				///
 										`nexexog',				///
+										`a_min',			/// coeff in linear combination of K_2sls and J
 										"`del_z'",				/// row vector
 										"`var_del'",			///
 										"`pi_z'",				///
@@ -5815,6 +5829,7 @@ program grid_recurse, rclass
 				nendog(`nendog')			///
 				nsendog(`nsendog')			///
 				ncsendog(`ncsendog')		///
+				a_min(`a_min')			///
 				ar_chi2(`ar_chi2')			///
 				k_chi2(`k_chi2')			///
 				k_w_chi2(`k_w_chi2')			///
@@ -6043,7 +6058,6 @@ program get_ci_from_table, rclass
 		mata: mata drop `rtable'												//  don't need Mata version of rejections table
 	}
 	mata: mata drop `p'												//  clean up
-
 * create macros for storing confidence sets
 	foreach testname in `testlist' {
 		local `testname'_cset ""
@@ -6153,6 +6167,43 @@ program get_ci_from_vcv, rclass
 
 end		//  end get_ci_from_vcv
 
+
+program compute_a_min, rclass
+	syntax [,       					///
+				nexexog(integer 0)		///
+				nendog(integer 0)		///
+				alpha(integer 0)		///
+				gamma(integer 0)		///
+			]
+// Will add k_w_level to the arguments.  Now alpha-0.05 and gamma = 0.05
+	tempname a_min k_df j_df fh a g
+	local k_df		= `nendog'
+	local j_df		= `nexexog'-`nendog'
+	local a			= 100-`alpha'
+	local g			= 100-`gamma'
+	local lookupf		"alpha`a'gamma`g'.csv"
+// The first column is p and the second column is k, the third column returns the a_min
+// Think how to get a vector	
+	!awk -F"," '($1 =="`k_df'")&& ($2 == "`nexexog'") { print $3 > "a.tmp"}' "`lookupf'"
+ 
+ 	file open `fh' using a.tmp, read
+	file read `fh' line
+	local linenum = 0
+	while r(eof)==0 {
+	    local linenum = `linenum' + 1
+	    scalar count = `linenum'
+	    local o`linenum' = `"`line'"'
+	    local no = `linenum'
+	    file read `fh' line
+	  }
+	file close `fh'
+	!rm a.tmp
+
+	return local a_min = `o1'	
+
+end    // end compute_a_min
+
+
 version 11.2
 mata:
 void compute_tests(												///
@@ -6160,6 +6211,7 @@ void compute_tests(												///
 							scalar lm,							/// boolean, =1 if LM, =0 if Wald
 							scalar nendog,						///
 							scalar nexexog,						///
+							scalar a_min,						/// coeff in linear combination  of K_2sls and J
 							string scalar del_z_name,			/// row vector
 							string scalar var_del_name,			///
 							string scalar pi_z_name,			///
@@ -6293,16 +6345,19 @@ void compute_tests(												///
 			j_chi2		= ar_chi2 - k_chi2
 		}
 
-// Add test case for robust K statistics
+// Add test case for K with 2sls weight statistics
 		zz			=invsym(zzinv)
 		aux4 = pi_beta'*zz*psi*zz*pi_beta // the meat term, to be inversed
 		aux4inv = invsym(aux4)
-		k_w_chi2		= r'*zz* pi_beta * aux4inv * pi_beta'*zz*r
+		// Store k_2sls (K stat with 2sls in efficient weight matrix
+		k_w_chi2_temp		= r'*zz* pi_beta * aux4inv * pi_beta'*zz*r
+		// Calculate the linear combination test statistic - not sure what to name
+		k_w_chi2		= k_w_chi2_temp + a_min*ar_chi2
 
 // return test stats in r()
 		st_numscalar("r(ar_chi2)", ar_chi2[1,1])
 		st_numscalar("r(k_chi2)", k_chi2[1,1])
-		st_numscalar("r(k_w_chi2)",k_w_chi2)
+		st_numscalar("r(k_w_chi2)",k_w_chi2[1,1])
 		st_numscalar("r(j_chi2)", j_chi2[1,1])
 		st_numscalar("r(rk)", rk[1,1])
 		st_numscalar("r(clr_stat)", clr_stat[1,1])
@@ -7087,6 +7142,7 @@ program compute_pvals, rclass
 				nendog(integer 0)		///
 				nsendog(integer 0)		/// also boolean for strongly-IDed vars
 				ncsendog(integer 0)		/// also boolean for subset AR test
+				a_min(real 0)			///
 				ar_chi2(real 0)			///
 				k_chi2(real 0)			///
 				k_w_chi2(real 0)			///
@@ -7152,7 +7208,30 @@ program compute_pvals, rclass
 		}
 	}
 	
-//	scalar `k_w_p'		=`k_w_chi2'-0.9 // placeholder!
+* K-J linear combination, now under the macro k_w_p
+	if `overid' & ~`ncsendog' {										
+		local k_df		= `nendog' - `nsendog'
+		local j_df		= `nexexog'-`nendog'
+		// simulation of (1+a)*chi2_p + a*chi2_k-p
+			tempname m K_size J_size k_w_sim k_w_p oldseed
+			mata: `m'		= `clrsims'
+			//mata: `m'		= 1000000
+			mata: `oldseed'	= rseed()								//  save existing seed
+			mata: rseed(12345)										//  set seed (replicability)
+			mata: `K_size'=rchi2(`m',1,`k_df')
+			mata: `J_size'=rchi2(`m',1,`j_df')
+			mata: rseed(`oldseed')									//  restore seed to previous value
+			mata: `k_w_sim'	= (1+`a_min')*`K_size' + `a_min'*`J_size'
+			mata: `k_w_p'	= sum(`k_w_sim' :> `k_w_chi2')/`m'		//  p-value = prop of simulated values > actual K_W stat
+			//mata: `k_w_crit' = 7.6235
+			//mata: printf("%5.0g",`k_w_chi2')
+			mata: st_numscalar("`k_w_p'",`k_w_p')					//  put into Stata
+			//mata: st_numscalar("`k_w_crit'",`k_w_crit')		//  extract the critical value for CSet, or calculate CS based on pvals
+			mata: mata drop `m' `K_size' `J_size'			//  and drop temp Mata vars
+			mata: mata drop `k_w_sim' `k_w_p' `oldseed'		
+		
+
+	}
 	
 	return scalar wald_df	=`wald_df'
 	return scalar wald_p	=`wald_p'
@@ -7165,7 +7244,7 @@ program compute_pvals, rclass
 		return scalar kj_p		=`kj_p'
 		return scalar k_df		=`k_df'
 		return scalar k_p		=`k_p'
-		return scalar k_w_p		=`k_p'
+		return scalar k_w_p		=`k_w_p'
 		return scalar j_df		=`j_df'
 		return scalar j_p		=`j_p'
 	}
