@@ -1341,6 +1341,7 @@ display "Somehow cannot pass gamma_hat_sims=`gamma_hat_sims' to construct_citabl
 	ereturn scalar	ar_df				=`ar_df'
 	ereturn scalar	ar_p				=`ar_p'
 	ereturn scalar	ar_chi2				=`ar_chi2'
+
 	if `overid' {
 		ereturn scalar	kjj_level		=`kjj_level'
 		ereturn scalar	kjk_level		=`kjk_level'
@@ -1404,13 +1405,15 @@ display "Somehow cannot pass gamma_hat_sims=`gamma_hat_sims' to construct_citabl
 			ereturn local	clr_cset	"`clr_cset'"
 		}
 	}
+
 	ereturn local	testlist			"`testlist'"
 	ereturn local	citestlist			"`citestlist'"
 	ereturn local	ptestlist			"`ptestlist'"
 	ereturn scalar	clrsims				=`clrsims'
 	ereturn scalar gamma_hat_sims			=`gamma_hat_sims'
-	ereturn scalar gamma_hat			=`gamma_hat'
 	ereturn scalar	closedform			=`closedform'
+			
+
 	if "`pwendo2'"~="" & `usegrid' {										//  save only if grid also constructed
 		ereturn local pwendo2						"`pwendo2'"
 	}		
@@ -1452,6 +1455,7 @@ display "Somehow cannot pass gamma_hat_sims=`gamma_hat_sims' to construct_citabl
 		ereturn local	points_descript		"`points_descript'"
 		ereturn local	gridpoints			"`gridpoints'"
 		ereturn scalar	points				=`points'
+		ereturn scalar gamma_hat			=`gamma_hat'
 	}
 	if e(sendo_ct) {											//  save strongly-identified beta at specified null
 		ereturn matrix	sbeta			=`sbeta'
@@ -5327,7 +5331,7 @@ program define computematrices_robust, rclass
 			ssa(real 0)								///
 			lm(integer 0)							///
 			]
-		
+timer on 5		
 	tempname pi_z bhat uhat zz zzinv del_z var_pi_z var_del var_pidel_z
 	tempname S S11 S12 S22
 
@@ -5398,7 +5402,7 @@ program define computematrices_robust, rclass
 	return mat pi_z			= `pi_z'
 	return mat var_del		= `var_del'
 	return mat var_pidel_z	= `var_pidel_z'
-
+timer off 5
 end		// end computematrices_robust
 
 program define construct_citable, rclass						//  recursive approach
@@ -5475,7 +5479,7 @@ program define construct_citable, rclass						//  recursive approach
 				wf(real 1)				///
 				forcerobust(integer 0)	///
 			]
-
+timer on 4
 * npd is flag set to 1 if npd matrices encountered
 		local npd = 0
 
@@ -5587,7 +5591,7 @@ program define construct_citable, rclass						//  recursive approach
 		local gamma_tilde = `alpha' - 100*`temp'
 		local gamma_hat = max(`gamma_tilde', 100-`gamma')
 		return scalar gamma_hat= `gamma_hat'
-
+timer off 4
 end		// end construct_citable
 
 
@@ -5654,7 +5658,8 @@ program grid_recurse, rclass
 				wf(real 1)				///
 				forcerobust(integer 0)	///
 			]
-
+timer clear
+timer on 3
 	tempname rk ar_p ar_chi2 ar_df k_p k_chi2 k_2sls lc_2sls lc_2sls_p k_df j_p j_chi2 j_df kj_p kj_chi2 ///
 		clr_p clr_stat clr_df ar_r k_r j_r kj_dnr kj_r kj_p clr_r				///
 		wald_p wald_chi2 wald_df wald_r
@@ -5677,7 +5682,6 @@ program grid_recurse, rclass
 		local newnullvec		"`nullvec' `null'"
 
 		if `moregrids' {
-
 			grid_recurse,								///
 							gridcols(`gridcols')		///
 							citable(`citable')			///
@@ -5742,7 +5746,7 @@ program grid_recurse, rclass
 				local npd			=max(`npd',r(npd))	//  promote to 1 if npd matrices encountered
 		}
 		else {											//  we've stopped recursing so test nulls in current gridlist `this' 
-
+//timer list 1
 			local counter = `counter'+1					//  about to do tests; increment by 1
 			_dots `counter' 0
 			mata: `gridnullvector' = strtoreal(tokens("`newnullvec'"))			//  easiest way to put string into a matrix is via Mata
@@ -5820,6 +5824,7 @@ program grid_recurse, rclass
 			local npd			=max(`npd',r(npd))	//  promote to 1 if npd matrix ever encountered
 
 * Weak-ID-robust tests
+
 			if `ncsendog' {										/// subset AR test; requires IID and linearity
 
 * x1 is subset weakly identified (wendo), x2 complement (not in subset, not tested, coeffs obtained by LIML)
@@ -5893,7 +5898,6 @@ program grid_recurse, rclass
 			local j_chi2		=r(j_chi2)
 			local clr_stat		=r(clr_stat)
 			local rk			=r(rk)
-
 * calculate test statistics, p-values, and rejection indicators from above matrices
 			compute_pvals,					///
 				closedform(`closedform')	///
@@ -5915,6 +5919,7 @@ program grid_recurse, rclass
 				rk(`rk')					///
 				kwt(`kwt')
 
+
 			local wald_df		=r(wald_df)
 			local wald_p		=r(wald_p)
 			local ar_df			=r(ar_df)
@@ -5930,20 +5935,40 @@ program grid_recurse, rclass
 			local rk_df			=r(rk_df)
 
 			local a_diff= (`invchi2_k_df'-`k_2sls')/`ar_chi2'*cond(`wald_chi2'>`invchi2_k_df',1,0)
-			mata: `cirow' = J(1,0,.)
+			
+			
+timer on 8
+
+			local gridcols_temp ""
+			foreach gc in `gridcols' {
+				local gridcols_temp "`gridcols_temp' ``gc''"
+			}
+			// gridcols is a nexted local macro, containing test stats locals.
+			// save all test stats in a local first and directly convert to mata is much faster
+			mata: `cirow' = strtoreal(tokens(st_local("gridcols_temp")))
+
+timer off 8
+timer on 6
+/*			mata: `cirow' = J(1,0,.)
 			foreach gc in `gridcols' {
 				mata: `cirow' = `cirow', ``gc''				//  construct grid row with test stats
 			}
+*/
+timer off 6
+timer on 7
 			mata: `cirow' = `gridnullvector', `cirow',`a_diff'		//  save grid null and strong beta along with test stats
 			mata: `citable' = `citable' \ `cirow'
+timer off 7
 			mata: mata drop `cirow' `gridnullvector'
+
 		}
 	}
 
 	return scalar npd		=`npd'
 	return local counter	=`counter'
-
-end
+timer off 3
+timer list
+end // end of grid_recurse
 
 program define construct_pcitable, rclass
 	version 11.2
@@ -6310,6 +6335,7 @@ void compute_tests(												///
 							string scalar svv_name				///
 							)
 {
+timer_on(1)
 		npd				=0										//  initialize
 
 		del_z			=st_matrix(del_z_name)					//  row vector
@@ -6399,7 +6425,6 @@ void compute_tests(												///
 		j_chi2 = ar_chi2 - k_chi2
 
 		rpsi_inv	= cholesky(psi_inv)						//  inv sqrt of psi
-
 //  Rank statistic of Kleibergen-Paap
 		rk			= rk_kp(	pi_beta,					/// =D in alt. notation, dim nexexog x nendog (LxK)
 								I(nendog),					///
@@ -6443,6 +6468,8 @@ void compute_tests(												///
 		st_numscalar("r(rk)", rk[1,1])
 		st_numscalar("r(clr_stat)", clr_stat[1,1])
 		st_numscalar("r(npd)", npd)
+timer_off(1)
+
 }
 end		//  end compute_tests
 
@@ -7234,7 +7261,7 @@ program compute_pvals, rclass
 				wald_chi2(real 0)		///
 				rk(real 0)				///
 				 *]
-
+timer on 2
 	tempname wald_p ar_p clr_p kj_p k_p lc_2sls_p j_p rk_p
 	
 	local wald_df		= `nendog' - `nsendog' - `ncsendog'
@@ -7312,8 +7339,8 @@ program compute_pvals, rclass
 		return scalar j_df		=`j_df'
 		return scalar j_p		=`j_p'
 	}
-
-end
+timer off 2
+end // end of compute_pval
 
 *****************************************************************************
 *** Subroutines from Mikusheva and Poi's condivreg:						  ***
