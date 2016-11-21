@@ -455,13 +455,12 @@ di as err "Internal weakiv error - preserve failed"
 	local wald_level		"`r(wald_level)'"
 	local clr_level			"`r(clr_level)'"
 	local k_level			"`r(k_level)'"
-	local gamma_level			"`r(gamma_level)'"
+	local gamma_level		"`r(gamma_level)'"
 	local j_level			"`r(j_level)'"
 	local kj_level			"`r(kj_level)'"
 	local kjk_level			"`r(kjk_level)'"
 	local kjj_level			"`r(kjj_level)'"
 	local clrsims			"`r(clrsims)'"
-	local gamma_hat_sims		"`r(gamma_hat_sims)'"				//  one round of simulation for calculating gamma_hat, maximal distortion cutoff
 	local testlist			"`r(testlist)'"					//  testlist for table
 	local citestlist		"`r(citestlist)'"				//  testlist for CI table
 	local ptestlist			"`r(ptestlist)'"				//  testlist for projection-based inference
@@ -623,11 +622,15 @@ di as err "Fixed-effects estimation requires data to be -xtset-"
 * Misc
 	local npd=0
 	
-	compute_a_min,nendog(`nendog') nexexog(`nexexog') alpha(`k_level') gamma(`gamma_level')
+	compute_a_min,nendog(`nendog') nsendog(`nsendog') nexexog(`nexexog') alpha(`k_level') gamma(`gamma_level')
 	local a_min = `r(a_min)'
 	local lc_2sls_crit = `r(lc_2sls_crit)'
-	// tabulate the 1-alpha (k_level) quantile of chi2 with dg nendog 
-	local invchi2_k_df = invchi2(`nendog', `k_level'/100)
+	local a_min_p = `r(a_min_p)'
+	local lc_2sls_crit_p = `r(lc_2sls_crit_p)'
+	// tabulate the 1-alpha (k_level) quantile of chi2 with dg nendog - nsendog
+	local invchi2_k_df = invchi2(`nendog'-`nsendog', `k_level'/100)
+	// tabulate the 1-alpha quantile of chi2 with dg 1 for projection test (for each component)
+	local invchi2_1_df = invchi2(1, `k_level'/100)
 
 ******************************** CUE point estimator if requested **************************
 	if `cuepoint' {
@@ -889,7 +892,9 @@ di as err "error: number of weakly endogenous (`nwendog') doesn't match number o
 										`nendog',			///
 										`nexexog',			///
 										`a_min',			/// weight in the linear combination of K_2sls and J
+										`a_min_p',			/// weight in linear combination of K_2sls and J for projection test
 										`lc_2sls_crit',			/// critical value of the linear combination distribution
+										`lc_2sls_crit_p',			/// critical value of the linear combination distribution
 										"`del_z'",			/// row vector
 										"`var_del'",		///
 										"`pi_z'",			///
@@ -940,7 +945,9 @@ di as err "error: number of weakly endogenous (`nwendog') doesn't match number o
 										`nendog',			///
 										`nexexog',			///
 										`a_min',			/// weight in linear combination of K_2sls and J
+										`a_min_p',			/// weight in linear combination of K_2sls and J for projection test
 										`lc_2sls_crit',			/// critical value of the linear combination distribution
+										`lc_2sls_crit_p',			/// critical value of the linear combination distribution
 										"`del_z'",			/// row vector
 										"`var_del'",		///
 										"`pi_z'",			///
@@ -965,7 +972,9 @@ di as err "error: number of weakly endogenous (`nwendog') doesn't match number o
 	local clr_stat		=r(clr_stat)
 	local rk			=r(rk)
 	local npd			=max(`npd',r(npd))		//  promote to 1 if npd matrix ever encountered
-
+	
+	tempname lc_2slsp
+	mat `lc_2slsp'		=r(lc_2slsp)
 * calculate test statistics, p-values, and rejection indicators from above matrices
 	compute_pvals,								///
 					closedform(`closedform')	///
@@ -978,10 +987,12 @@ di as err "error: number of weakly endogenous (`nwendog') doesn't match number o
 					nsendog(`nsendog')			///
 					ncsendog(`ncsendog')		///
 					a_min(`a_min')			///
+					a_min_p(`a_min_p')		///
 					lc_2sls_crit(`lc_2sls_crit')	///
+					lc_2sls_crit_p(`lc_2sls_crit_p') ///
+					lc_2slsp(`lc_2slsp')		///
 					ar_level(`ar_level')		///
 					k_level(`k_level')			///
-					gamma_level(`gamma_level')			///
 					j_level(`j_level')			///
 					kj_level(`kj_level')		///
 					clr_level(`clr_level')		///
@@ -1069,7 +1080,6 @@ di as err "         weakiv rk stat df=`rk_df'; ranktest id stat df=`idstat_df'
 
 		tempname citable										//  set local name at top level so will persist until program exit
 																//  same name is used for Mata matrix
-display "Somehow cannot pass gamma_hat_sims=`gamma_hat_sims' to construct_citable - too many arguments in syntax?"
 		construct_citable,				///
 			citable(`citable')			///
 			gridcols(`gridcols')		///
@@ -1090,11 +1100,10 @@ display "Somehow cannot pass gamma_hat_sims=`gamma_hat_sims' to construct_citabl
 			nwendog(`nwendog')			///
 			nsendog(`nsendog')			///
 			ncsendog(`ncsendog')		///
-			a_min(`a_min')			///
 			alpha(`k_level')		/// for calculating distortion cutoff, we need alpha
 			gamma(`gamma_level')		///
 			invchi2_k_df(`invchi2_k_df')	///
-			lc_2sls_crit(`lc_2sls_crit')	///
+			invchi2_1_df(`invchi2_1_df')	///
 			overid(`overid')			///
 			kwt(`kwt')					///
 			nobs(`N')					///
@@ -1145,6 +1154,9 @@ display "Somehow cannot pass gamma_hat_sims=`gamma_hat_sims' to construct_citabl
 		local npd					=max(`npd',r(npd))		//  promote to 1 if npd matrix ever encountered
 		local citable_cnames		"`r(cnames)'"			//  aligns with columns of Mata matrix `citable'
 		local gamma_hat = r(gamma_hat)			// distortion cutoff
+		forvalues i=1/`nwendog' {		
+			local gamma_hat`i' = r(gamma_hat`i')			// distortion cutoff for projection test
+		}
 
 * Summary:
 * Mata matrix `citable' has full CI table (no size limit)
@@ -1227,7 +1239,6 @@ display "Somehow cannot pass gamma_hat_sims=`gamma_hat_sims' to construct_citabl
 				gridpoints(`gridpoints')			///
 				ar_level(`ar_level')				///
 				k_level(`k_level')					///
-			        gamma_level(`gamma_level')					///
 				j_level(`j_level')					///
 				kj_level(`kj_level')				///
 				clr_level(`clr_level')				///
@@ -1277,7 +1288,6 @@ display "Somehow cannot pass gamma_hat_sims=`gamma_hat_sims' to construct_citabl
 			gridpoints(`gridpoints')				///
 			ar_level(`ar_level')					///
 			k_level(`k_level')						///
-		        gamma_level(`gamma_level')					///
 			j_level(`j_level')						///
 			kj_level(`kj_level')					///
 			clr_level(`clr_level')					///
@@ -1410,7 +1420,6 @@ display "Somehow cannot pass gamma_hat_sims=`gamma_hat_sims' to construct_citabl
 	ereturn local	citestlist			"`citestlist'"
 	ereturn local	ptestlist			"`ptestlist'"
 	ereturn scalar	clrsims				=`clrsims'
-	ereturn scalar gamma_hat_sims			=`gamma_hat_sims'
 	ereturn scalar	closedform			=`closedform'
 			
 
@@ -1455,7 +1464,10 @@ display "Somehow cannot pass gamma_hat_sims=`gamma_hat_sims' to construct_citabl
 		ereturn local	points_descript		"`points_descript'"
 		ereturn local	gridpoints			"`gridpoints'"
 		ereturn scalar	points				=`points'
-		ereturn scalar gamma_hat			=`gamma_hat'
+		ereturn scalar  gamma_hat			=`gamma_hat'
+		forvalues i=1/`nwendog' {		
+			ereturn scalar gamma_hat_p`i' = `gamma_hat`i''		// distortion cutoff for projection test
+		}
 	}
 	if e(sendo_ct) {											//  save strongly-identified beta at specified null
 		ereturn matrix	sbeta			=`sbeta'
@@ -2196,29 +2208,29 @@ program define display_output
 
 * print combined test and confidence set results
 * test tnames
-	local name_clr		: di "{txt}{ralign 5:{helpb weakiv##CLR:CLR}}"
-	local name_ar		: di "{txt}{ralign 5:{helpb weakiv##AR:AR}}"
-	local name_k		: di "{txt}{ralign 5:{helpb weakiv##K:K}}"
-	local name_lc_2sls	: di "{txt}{ralign 5:LC_2sls}"
-	local name_j		: di "{txt}{ralign 5:{helpb weakiv##J:J}}"
-	local name_kj		: di "{txt}{ralign 5:{helpb weakiv##K-J:K-J}}"
-	local name_wald		: di "{txt}{ralign 5:{helpb weakiv##Wald:Wald}}"
+	local name_clr		: di "{txt}{ralign 7:{helpb weakiv##CLR:CLR}}"
+	local name_ar		: di "{txt}{ralign 7:{helpb weakiv##AR:AR}}"
+	local name_k		: di "{txt}{ralign 7:{helpb weakiv##K:K}}"
+	local name_lc_2sls	: di "{txt}{ralign 7:LC_2sls}"
+	local name_j		: di "{txt}{ralign 7:{helpb weakiv##J:J}}"
+	local name_kj		: di "{txt}{ralign 7:{helpb weakiv##K-J:K-J}}"
+	local name_wald		: di "{txt}{ralign 7:{helpb weakiv##Wald:Wald}}"
 * test levels
 	local level_clr		: di %2.0f e(clr_level) "%"
 	local level_ar		: di %2.0f e(ar_level) "%"
 	local level_k		: di %2.0f e(k_level) "%"
-	local level_lc_2sls	: di %2.0f e(gamma_level) "gamma_hat%"
+	local level_lc_2sls	: di %2.0f e(k_level) "%"
 	local level_j		: di %2.0f e(j_level) "%"
 	local level_kj		: di %2.0f e(kj_level) "% (" %2.0f e(kjk_level) "%," %2.0f e(kjj_level) "%)"
 	local level_wald	: di %2.0f e(wald_level) "%"
 * test text (LHS of table)
-	local testtxt_clr	: di "{txt}{lalign 9:stat(.)} = {res}"			%8.2f `e(clr_stat)'		"{center 3:} {res}" %7.4f `e(clr_p)'
-	local testtxt_ar	: di "{txt}{lalign 9:chi2({res:`e(ar_df)'})} = {res}"	%8.2f `e(ar_chi2)'		"{center 3:} {res}" %7.4f `e(ar_p)'
-	local testtxt_k		: di "{txt}{lalign 9:chi2({res:`e(k_df)'})} = {res}"	%8.2f `e(k_chi2)'		"{center 3:} {res}" %7.4f `e(k_p)'
-	local testtxt_lc_2sls	: di "{txt}{lalign 9:chi2({res:`e(k_df)',`e(j_df)'})} = {res}"	%8.2f `e(lc_2sls)'		"{center 3:} {res}" %7.4f `e(lc_2sls_p)'
-	local testtxt_j		: di "{txt}{lalign 9:chi2({res:`e(j_df)'})} = {res}"	%8.2f `e(j_chi2)'		"{center 3:} {res}" %7.4f `e(j_p)'
-	local testtxt_kj	: di "{txt}{center 20:<n.a.>}"													"{center 3:} {res}" %7.4f `e(kj_p)'
-	local testtxt_wald	: di "{txt}{lalign 9:chi2({res:`e(wald_df)'})} = {res}"	%8.2f `e(wald_chi2)'	"{center 3:} {res}" %7.4f `e(wald_p)'
+	local testtxt_clr	: di "{txt}{lalign 11:stat(.)} = {res}"			%8.2f `e(clr_stat)'		"{center 3:} {res}" %7.4f `e(clr_p)'
+	local testtxt_ar	: di "{txt}{lalign 11:chi2({res:`e(ar_df)'})} = {res}"	%8.2f `e(ar_chi2)'		"{center 3:} {res}" %7.4f `e(ar_p)'
+	local testtxt_k		: di "{txt}{lalign 11:chi2({res:`e(k_df)'})} = {res}"	%8.2f `e(k_chi2)'		"{center 3:} {res}" %7.4f `e(k_p)'
+	local testtxt_lc_2sls	: di "{txt}{lalign 11:chi2({res:`e(k_df)',`e(j_df)'})} = {res}"	%8.2f `e(lc_2sls)'	"{center 3:} {res}" "{txt} see footnote for CR"
+	local testtxt_j		: di "{txt}{lalign 11:chi2({res:`e(j_df)'})} = {res}"	%8.2f `e(j_chi2)'		"{center 3:} {res}" %7.4f `e(j_p)'
+	local testtxt_kj	: di "{txt}{center 20:<n.a.>}"								"{center 5:} {res}" %7.4f `e(kj_p)'
+	local testtxt_wald	: di "{txt}{lalign 11:chi2({res:`e(wald_df)'})} = {res}"	%8.2f `e(wald_chi2)'	"{center 3:} {res}" %7.4f `e(wald_p)'
 * CI text (RHS of table)
 	local ci_clr		: di " {c |}{center 15:`level_clr'}{res}{center 22:`e(clr_cset)'}"
 	local ci_ar		: di " {c |}{center 15:`level_ar'}{res}{center 22:`e(ar_cset)'}"
@@ -2290,13 +2302,13 @@ program define display_output
 		di as text "{p 0 4}Regressors assumed exogenous: `e(tinexog)'{p_end}"
 	}
 * header
-	di as txt "{hline 6}{c TT}{hline 33}" _c
+	di as txt "{hline 8}{c TT}{hline 33}" _c
 	if e(ci) di as txt "{c TT}{hline 37}" _c
 	di
-	di as txt "{ralign 5:Test} {c |} {center 21:Statistic}{center 10:   p-value}" _c
+	di as txt "{ralign 7:Test} {c |} {center 21:Statistic}{center 10:   p-value}" _c
 	if e(ci) di as txt " {c |}{center 15:Conf. level}{center 22:{helpb weakiv##cset:Conf. Set}}" _c
 	di
-	di as txt "{hline 6}{c +}{hline 33}" _c
+	di as txt "{hline 8}{c +}{hline 33}" _c
 	if e(ci) di as txt "{c +}{hline 37}" _c
 	di
 * weak-ID stats
@@ -2306,7 +2318,7 @@ program define display_output
 		di
 	}
 * separating line
-	di as txt "{hline 6}{c +}{hline 33}" _c
+	di as txt "{hline 8}{c +}{hline 33}" _c
 	if e(ci) di as txt "{c +}{hline 37}" _c
 	di
 * wald
@@ -2314,7 +2326,7 @@ program define display_output
 	if e(ci) di "`ci_wald'" _c
 	di
 * last separating line
-	di as txt "{hline 6}{c BT}{hline 33}" _c
+	di as txt "{hline 8}{c BT}{hline 33}" _c
 	if e(ci) di as txt "{c BT}{hline 37}" _c
 	di
 
@@ -2340,6 +2352,8 @@ program define display_output
 			di %12s "`vn'" _col(15) %9.0g `ecuebeta'[1,colnumb(`ecuebeta',"`vn'")]
 		}
 	}
+	// Display LC_2sls_crit value since its p-value is not calculated
+	di as txt "{p}Critical value for LC_2sls test is `e(lc_2sls_crit)'.{p_end}"
 	if e(grid) {
 		if e(wendo_ct)==1 {
 			local pointstext "`e(points)'"
@@ -2355,8 +2369,8 @@ program define display_output
 	if e(clrsims)>0 {
 		di as txt "{p}CLR distribution and p-values obtained by simulation (`e(clrsims)' draws).{p_end}"
 	}
-	if e(gamma_hat_sims)>0 {
-		di as txt "{p}LC_2sls distortion cutoff is `e(gamma_hat)', obtained by simulation (`e(gamma_hat_sims)' draws).{p_end}"
+	if e(grid) {
+		di as text "{p}LC_2sls maximal coverage distortion is" %5.0f e(gamma_level) "%; distortion cutoff is `e(gamma_hat)'%, obtained by simulation 10^6 draws).{p_end}"
 
 	}
 	local Ntext "`e(N)'"
@@ -2418,7 +2432,11 @@ program define display_output
 				}
 			}
 			di as txt "{hline 71}"
+			di as text "{p}LC_2sls maximal coverage distortion is " ///
+				%5.0f e(gamma_level) "%; distortion cutoff is " %5.3f e(gamma_hat_p`vnum') "%, obtained by simulation 10^6 draws).{p_end}"
+
 		}
+
 	}
 
 end
@@ -2449,7 +2467,6 @@ program define estimate_model
 			project(string)												/// string since must accept _all
 			project2(varlist fv ts min=2 max=2)							///
 			clrsims(integer -1)										///
-			gamma_hat_sims(integer 0)								///
 			subset(varlist fv ts)										///
 			testexog(varlist fv ts)										///
 			testid														///
@@ -2573,7 +2590,6 @@ program define get_option_specs, rclass
 			project(string)														///
 			project2(string)													///
 			clrsims(integer -1)									///
-			gamma_hat_sims(integer 0)								///
 			exportmats															///
 			ESTSTOREwald(name) DISPLAYwald ESTUSEwald(name)						///
 			ESTADD1 ESTADD2(name)												///
@@ -2615,13 +2631,22 @@ di as res "          for 2-variable projection-based inference; graph option ign
 
 * Check all provided confidence levels.
 * Stata's definition of a legal level is >=10 and <=99.99
-	foreach lev in `levellist' `arlevel' `jlevel' `kjlevel' `gammalevel' {
+	foreach lev in `levellist' `arlevel' `jlevel' `kjlevel'  {
 		if `lev'<10 | `lev'>=99.99	{									//  Stata's definition of a legal level
 di as err "illegal confidence level `lev': must be >=10 and <=99.99"
 			exit 198
 		}
 	}
-
+	if "`gammalevel'" == "" {
+		local gamma_level = 5 
+	}
+	else if	inlist(`gammalevel', 1, 5, 10, 15, 20) == 0 {
+di as err "error - gamma is out of range - need to calculate it" // gamma_level not in a_min.csv
+		exit 198
+	}
+	else {
+		local gamma_level = `gammalevel'
+	}
 * LM vs MD indicated by `lm' macro. `lm'=="lm" => LM, `lm'=="" => MD.
 * Check legality
 	if ("`lm'"=="lm") & ("`md'" == "md") {
@@ -2691,7 +2716,7 @@ di as err "illegal option - cuepoint option supported only for linear IV models"
 	}
 * Minimal value of coverage distortion gamma, if not specified set to default value
 	if "`gammalevel'"=="" {
-		local gamma_level	"`level'"
+		local gamma_level	=5
 	}
 	else {
 		local gamma_level	"`gammalevel'"
@@ -2819,7 +2844,7 @@ di as err "incompatible options: kjlevel(.) and kwt(.)"
 	else {
 		local testlist			"clr k lc_2sls j kj ar"
 		local citestlist		"clr k lc_2sls j kj ar"
-		local ptestlist			"clr k lc_2sls j kj ar wald"
+		local ptestlist			"clr k j kj ar wald lc_2sls" 
 
 		if `usegrid' {
 			local gridcols				///
@@ -2838,6 +2863,10 @@ di as err "incompatible options: kjlevel(.) and kwt(.)"
 							clr_p		///
 							rk			///
 							rk_p
+			* add the rejection indicator for LC_2sls projection tests
+			forvalues i = 1/`nwendog' {
+				local gridcols "`gridcols' lc_2slsp`i'_p"
+			}
 		}
 	}
 * And above overridden if exactly-ID or subset AR, when only AR is available
@@ -2982,7 +3011,6 @@ di as error "options estadd and estadd({it:name}) may not be combined"
 	return local kjk_level			"`kjk_level'"
 	return local kjj_level			"`kjj_level'"
 	return local clrsims			"`clrsims'"
-	return local gamma_hat_sims		"`gamma_hat_sims'"
 	return local ci					"`ci'"
 	return local closedform			=`closedform'
 	return local usegrid			"`usegrid'"
@@ -4581,7 +4609,7 @@ di as err "weakiv replay error: " _c
 		local level		"`1'"						//  first level provided is default
 	}
 * AR, KJ and J levels - can be set separately
-	foreach stat in ar kj j gamma{
+	foreach stat in ar kj j {
 		if "``stat'level'"=="" {
 			local `stat'_level	"`level'"			//  not specified, use default
 		}
@@ -4591,12 +4619,22 @@ di as err "weakiv replay error: " _c
 		}
 	}
 * Check legality
-	local check "`levellist' `ar_level' `kj_level' `j_level' `gamma_level'"
+	local check "`levellist' `ar_level' `kj_level' `j_level'"
 	foreach lev of local check {					//  check legality
 		if `lev' < 10.00 | `lev' > 99.99 {			//  Stata legal levels limits
 di as err "error - illegal test level `lev'"
 			exit 198
 		}
+	}
+	if "`gammalevel'" == "" {
+		local gamma_level = 5 
+	}
+	else if	inlist(`gammalevel', 1, 5, 10, 15, 20) == 0 {
+di as err "error - gamma is out of range - need to calculate it" // gamma_level not in a_min.csv
+		exit 198
+	}
+	else {
+		local gamma_level = `gammalevel'
 	}
 * Rest are default (parameter-only tests) and must be the same; can't be set separately by user.
 	local k_level		"`level'"
@@ -4663,7 +4701,6 @@ di as err "error: missing saved grid e(citable)"
 			cnames(`citable_cnames')	///
 			ar_level(`ar_level')		///
 			k_level(`k_level')			///
-			gamma_level(`gamma_level')			///
 			j_level(`j_level')			///
 			kj_level(`kj_level')		///
 			clr_level(`clr_level')
@@ -4697,7 +4734,6 @@ di as err "error: missing saved grid e(citable)"
 			ereturn scalar	kj_level		=`kj_level'
 			ereturn scalar	j_level			=`j_level'
 			ereturn scalar	k_level			=`k_level'
-			ereturn scalar  gamma_level		=`gamma_level'
 			ereturn scalar	clr_level		=`clr_level'
 		}
 	}
@@ -4764,7 +4800,6 @@ di as err "syntax error - variable listed in project(.) but not in endogenous"
 					gridpoints(`gridpoints')		///
 					ar_level(`ar_level')			///
 					k_level(`k_level')				///
-					gamma_level(`gamma_level')				///
 					j_level(`j_level')				///
 					kj_level(`kj_level')			///
 					clr_level(`clr_level')			///
@@ -4871,7 +4906,6 @@ di as err "syntax error - illegal graph `badgraphs'"
 				gridpoints(`gridpoints')				///
 				ar_level(`ar_level')					///
 				k_level(`k_level')						///
-				gamma_level(`gamma_level')					///
 				j_level(`j_level')						///
 				kj_level(`kj_level')					///
 				clr_level(`clr_level')					///
@@ -5427,9 +5461,8 @@ program define construct_citable, rclass						//  recursive approach
 				nwendog(integer 0)		///
 				nsendog(integer 0)		///
 				ncsendog(integer 0)		///
-				a_min(real 0)			///
 				invchi2_k_df(real 0)		///
-				lc_2sls_crit(real 0)		///
+				invchi2_1_df(real 0)		///
 				overid(integer 0)		///
 				alpha(real 0)			///
 				gamma(real 0)			/// alpha and gamma are used to calculate the maximal distortion coverage
@@ -5479,9 +5512,17 @@ program define construct_citable, rclass						//  recursive approach
 				wf(real 1)				///
 				forcerobust(integer 0)	///
 			]
+
 timer on 4
 * npd is flag set to 1 if npd matrices encountered
 		local npd = 0
+
+* compute a(gamma) that is needed for calculating lc_2sls in compute_test and compute_pvals
+		compute_a_min,nendog(`nendog') nsendog(`nsendog') nexexog(`nexexog') alpha(`alpha') gamma(`gamma')
+		local a_min = `r(a_min)'
+		local lc_2sls_crit = `r(lc_2sls_crit)'
+		local a_min_p = `r(a_min_p)'
+		local lc_2sls_crit_p = `r(lc_2sls_crit_p)'
 
 * cnames = column names for grid
 * leading columns in grid: nulls and strong betas
@@ -5491,8 +5532,13 @@ timer on 4
 		if `nsendog' {
 			local cnames "`cnames' `sendo'"				//  additional columns for strongly-IDed betas
 		}
+* The last columns in grid: a_diff and a_diff`i' for calculating LC_2sls distortion cutoff
+		local a_diff "a_diff"
+		forvalues i=1/`nwendog' {
+			local a_diff "`a_diff' a_diff`i'"			
+		}
 * and append names of columns in gridcols
-		local cnames	"`cnames' `gridcols' a_diff"
+		local cnames	"`cnames' `gridcols' `a_diff'"
 		local cnames	: list clean cnames
 		local cnum		: list sizeof cnames			//  number of columns for grid
 		mata: `citable' = J(0,`cnum',0)				//  initialize grid; use Mata (no limits on grid size)
@@ -5512,8 +5558,11 @@ timer on 4
 						nsendog(`nsendog')			///
 						ncsendog(`ncsendog')		///
 						a_min(`a_min')				///
+						a_min_p(`a_min_p')				///
 						invchi2_k_df(`invchi2_k_df')		///
+						invchi2_1_df(`invchi2_1_df')		///
 						lc_2sls_crit(`lc_2sls_crit')		///
+						lc_2sls_crit_p(`lc_2sls_crit_p')		///
 						overid(`overid')			///
 						kwt(`kwt')					///
 						nobs(`nobs')				///
@@ -5561,7 +5610,7 @@ timer on 4
 * Finish up
 		return scalar npd		= `npd'					//  flag to indicate NPD matrices encountered
 		return local cnames			"`cnames'"			//  col names for CI table
-		
+
 		local gamma_hat_sims = 1000000
 * Calculate \tilde{a} which is the maximum of weight a(gamma) that solves K+a*S=chi2_k_df, and solve for gamma_tilde
 * Then gamma_hat is the maximum of gamma_tilde and gamma
@@ -5573,24 +5622,44 @@ timer on 4
 		local k_df		= `nendog' - `nsendog'
 		local j_df		= `nexexog'-`nendog'
 		// simulation of (1+a)*chi2_p + a*chi2_k-p
-			tempname m K_size J_size lc_sim temp oldseed
+			tempname m K_size J_size P_size K_1_size lc_sim pr_k_df pr_1_df oldseed
 			mata: `m'		= `gamma_hat_sims'
-			//mata: `m'		= 1000000
 			mata: `oldseed'	= rseed()								//  save existing seed
 			mata: rseed(12345)										//  set seed (replicability)
 			mata: `K_size'=rchi2(`m',1,`k_df')
 			mata: `J_size'=rchi2(`m',1,`j_df')
+			mata: `P_size'=rchi2(`m',1,1)
+			mata: `K_1_size'=rchi2(`m',1,`nexexog'-1)
 			mata: rseed(`oldseed')									//  restore seed to previous value
 			mata: `lc_sim'	= (1+`a_max')*`K_size' + `a_max'*`J_size'
-			mata: `temp'	= sum(`lc_sim' :<= `invchi2_k_df')/`m'	
+			mata: `pr_k_df'	= sum(`lc_sim' :<= `invchi2_k_df')/`m'	
+			
+			// the simulated probability that linear comb of chi-p and chi-k-p less than `alpha' quantile of chi-p
 				
-			mata: st_numscalar("`temp'",`temp')					//  put into Stata
-			mata: mata drop `m' `K_size' `J_size'			//  and drop temp Mata vars
-			mata: mata drop `lc_sim' `temp' `oldseed'
+			mata: st_numscalar("`pr_k_df'",`pr_k_df')					//  put into Stata
+			mata: mata drop `K_size' `J_size'			//  and drop temp Mata vars
+			mata: mata drop `lc_sim' `pr_k_df' `oldseed'
 	
-		local gamma_tilde = `alpha' - 100*`temp'
-		local gamma_hat = max(`gamma_tilde', 100-`gamma')
+		local gamma_tilde = `alpha' - 100*`pr_k_df'			
+		local gamma_hat = max(`gamma_tilde', `gamma')
+		// gamma_tilde is defined s.t. prelim CS CS with coverage `alpha'-`gamma_tilde' are contained in the non-robust CS
 		return scalar gamma_hat= `gamma_hat'
+		
+* Repeat the above procedure for projection test distortion cutoff
+		forvalues i=1/`nwendog' {
+			local a_diff_col: list posof "a_diff`i'" in cnames
+			mata: `a_col' = `citable'[.,`a_diff_col']
+			mata: `a_max'=colmax(`a_col')
+			mata: `lc_sim'	= (1+`a_max')*`P_size' + `a_max'*`K_1_size'
+			mata: `pr_1_df'	= sum(`lc_sim' :<= `invchi2_1_df')/`m'	
+			
+			mata: st_numscalar("`pr_1_df'",`pr_1_df')					//  put into Stata
+			local gamma_tilde = `alpha' - 100*`pr_1_df'			
+			local gamma_hat = max(`gamma_tilde', `gamma')
+		// gamma_tilde is defined s.t. prelim CS CS with coverage `alpha'-`gamma_tilde' are contained in the non-robust CS
+			return scalar gamma_hat`i'= `gamma_hat'
+		}
+		mata: mata drop `m' `P_size' `K_1_size' `lc_sim' `pr_1_df'
 timer off 4
 end		// end construct_citable
 
@@ -5612,8 +5681,11 @@ program grid_recurse, rclass
 				nsendog(integer 0)		///
 				ncsendog(integer 0)		///
 				a_min(real 0)			///
-				invchi2_k_df(real 0)		///
+				a_min_p(real 0)			///
+				invchi2_k_df(real 0)		///				
+				invchi2_1_df(real 0)		///
 				lc_2sls_crit(real 0)		///
+				lc_2sls_crit_p(real 0)		///
 				overid(integer 0)		///
 				kwt(real 0)				///
 				nobs(real 0)			///
@@ -5697,8 +5769,11 @@ timer on 3
 							nsendog(`nsendog')			///
 							ncsendog(`ncsendog')		///
 							a_min(`a_min')   			///
+							a_min_p(`a_min_p')   			///
 							invchi2_k_df(`invchi2_k_df')		///
+							invchi2_1_df(`invchi2_1_df')		///
 							lc_2sls_crit(`lc_2sls_crit')		///
+							lc_2sls_crit_p(`lc_2sls_crit_p')		///
 							overid(`overid')			///
 							kwt(`kwt')					///
 							nobs(`nobs')				///
@@ -5746,12 +5821,13 @@ timer on 3
 				local npd			=max(`npd',r(npd))	//  promote to 1 if npd matrices encountered
 		}
 		else {											//  we've stopped recursing so test nulls in current gridlist `this' 
-//timer list 1
+timer on 9
 			local counter = `counter'+1					//  about to do tests; increment by 1
 			_dots `counter' 0
 			mata: `gridnullvector' = strtoreal(tokens("`newnullvec'"))			//  easiest way to put string into a matrix is via Mata
 			mata: st_matrix("`wgridnullvector'", `gridnullvector')
 			mat `gridnullvector'  = `wgridnullvector' 							//  So gridnull vector is in Mata and Stata
+timer off 9
 			if `nsendog'>0 {													//  append coeffs for strong (if any) to nullvector
 		
 				if `iid' & `cuestrong' {
@@ -5815,14 +5891,17 @@ timer on 3
 * calculate test stats
 
 * Wald test. Works for all cases.
+timer on 10
 			mata: s_wald(							///
 							"`var_wbeta'",			///
 							"`wbeta'",				/// row vector
 							"`wgridnullvector'"		/// rowvector
 							)
 			local wald_chi2		=r(wald_chi2)
+			tempname wald_chi2p
+			mat `wald_chi2p' 	=r(wald_chi2p)			// row vector that stores Wald stat for projection test
 			local npd			=max(`npd',r(npd))	//  promote to 1 if npd matrix ever encountered
-
+timer off 10
 * Weak-ID-robust tests
 
 			if `ncsendog' {										/// subset AR test; requires IID and linearity
@@ -5853,7 +5932,9 @@ timer on 3
 										`nendog',				///
 										`nexexog',				///
 										`a_min',			/// weight in linear combination of K_2sls and J
+										`a_min_p',			/// weight in linear combination of K_2sls and J for projection test
 										`lc_2sls_crit',			/// critical value of the linear combination distribution
+										`lc_2sls_crit_p',			/// critical value of the linear combination distribution
 										"`del_z'",				/// row vector
 										"`var_del'",			///
 										"`pi_z'",				///
@@ -5878,7 +5959,9 @@ timer on 3
 										`nendog',				///
 										`nexexog',				///
 										`a_min',			/// weight in linear combination of K_2sls and J
+										`a_min_p',			/// weight in linear combination of K_2sls and J for projection test
 										`lc_2sls_crit',			/// critical value of the linear combination distribution
+										`lc_2sls_crit_p',			/// critical value of the linear combination distribution
 										"`del_z'",				/// row vector
 										"`var_del'",			///
 										"`pi_z'",				///
@@ -5898,6 +5981,11 @@ timer on 3
 			local j_chi2		=r(j_chi2)
 			local clr_stat		=r(clr_stat)
 			local rk			=r(rk)
+			
+			tempname k_2slsp lc_2slsp
+			mat `k_2slsp'		=r(k_2slsp)
+			mat `lc_2slsp'		=r(lc_2slsp)
+
 * calculate test statistics, p-values, and rejection indicators from above matrices
 			compute_pvals,					///
 				closedform(`closedform')	///
@@ -5909,7 +5997,10 @@ timer on 3
 				nsendog(`nsendog')			///
 				ncsendog(`ncsendog')		///
 				a_min(`a_min')			///
+				a_min_p(`a_min_p')			///
 				lc_2sls_crit(`lc_2sls_crit')	///
+				lc_2sls_crit_p(`lc_2sls_crit_p')	///
+				lc_2slsp(`lc_2slsp')			///
 				ar_chi2(`ar_chi2')			///
 				k_chi2(`k_chi2')			///
 				lc_2sls(`lc_2sls')			///
@@ -5933,9 +6024,18 @@ timer on 3
 			local j_p			=r(j_p)
 			local rk_p			=r(rk_p)
 			local rk_df			=r(rk_df)
+			// store the rejection indicator for LC_2sls projection tests in gridcols
+			forvalues i=1/`nwendog' {
+				local lc_2slsp`i'_p = r(lc_2slsp`i'_p)
+				// and record a_diff for each projection test - need to return k_2slsp and calculate invchi2_1_df
+				local a_diff`i'= (`invchi2_1_df'-`k_2slsp'[1,`i'])/`ar_chi2'*cond(`wald_chi2p'[1,`i']>`invchi2_1_df',1,0)
 
+			}
+			// record a_diff for each grid to calculate a_max at the end of grid recurse
 			local a_diff= (`invchi2_k_df'-`k_2sls')/`ar_chi2'*cond(`wald_chi2'>`invchi2_k_df',1,0)
-			
+			forvalues i=1/`nwendog' {
+				local a_diff "`a_diff' `a_diff`i''"
+			}		
 			
 timer on 8
 
@@ -5943,9 +6043,12 @@ timer on 8
 			foreach gc in `gridcols' {
 				local gridcols_temp "`gridcols_temp' ``gc''"
 			}
-			// gridcols is a nexted local macro, containing test stats locals.
+			// gridcols is a nested local macro, containing test stats locals.
 			// save all test stats in a local first and directly convert to mata is much faster
-			mata: `cirow' = strtoreal(tokens(st_local("gridcols_temp")))
+			
+			// add gridnullvector to the first column and a_diff the last column
+			local gridcols_temp "`gridcols_temp' `a_diff' "
+			mata: `cirow' = `gridnullvector', strtoreal(tokens(st_local("gridcols_temp")))
 
 timer off 8
 timer on 6
@@ -5953,21 +6056,22 @@ timer on 6
 			foreach gc in `gridcols' {
 				mata: `cirow' = `cirow', ``gc''				//  construct grid row with test stats
 			}
+			mata: `cirow' = `gridnullvector', `cirow',`a_diff'		//  save grid null and strong beta along with test stats
+
 */
 timer off 6
 timer on 7
-			mata: `cirow' = `gridnullvector', `cirow',`a_diff'		//  save grid null and strong beta along with test stats
 			mata: `citable' = `citable' \ `cirow'
-timer off 7
 			mata: mata drop `cirow' `gridnullvector'
-
+timer off 7
 		}
 	}
 
 	return scalar npd		=`npd'
 	return local counter	=`counter'
 timer off 3
-timer list
+*timer list
+timer clear
 end // end of grid_recurse
 
 program define construct_pcitable, rclass
@@ -5982,14 +6086,16 @@ program define construct_pcitable, rclass
 				gridpoints(numlist)		///
 				ar_level(integer 0)		///
 				k_level(integer 0)		///
-				gamma_level(integer 0)		///
 				j_level(integer 0)		///
 				kj_level(real 0)		///
 				clr_level(integer 0)	///
 				wald_level(integer 0)	///
 			]
-
-	foreach test of local testlist {
+        // testlist does not include lc_2sls because we get rejection indicator(s) from compute_pvals directly for projection test
+	local lc_2sls_col : list posof "lc_2slsp`vnum'_p" in cnames
+	local lc_2sls "lc_2sls"
+	local ptestlist : list testlist - lc_2sls
+	foreach test of local ptestlist {
 		local testcol		: list posof "`test'_p" in cnames
 	 	local gridcols		"`gridcols' `testcol'"
 	 	local testlevels	"`testlevels' ``test'_level'"
@@ -5998,7 +6104,7 @@ program define construct_pcitable, rclass
 	tempname p											//  name to use for pointer
 	mata: `p' = &`citable'								//  pointer to Mata matrix (CI table)
 
-	mata: `pcitable' = project_test(`vnum', `p', `points', "`gridpoints'", "`gridcols'", "`testlevels'")
+	mata: `pcitable' = project_test(`vnum', `lc_2sls_col', `p', `points',"`gridpoints'", "`gridcols'", "`testlevels'")
 
 	foreach tname of local testlist {					//  add _r to end of testname to get colname
 		local ptcnames			"`ptcnames' `tname'_r"
@@ -6023,7 +6129,6 @@ program define construct_pcitable2, rclass
 				gridpoints(numlist)		///
 				ar_level(integer 0)		///
 				k_level(integer 0)		///
-				gamma_level(integer 0)		///
 				j_level(integer 0)		///
 				kj_level(real 0)		///
 				clr_level(integer 0)	///
@@ -6111,7 +6216,6 @@ program get_ci_from_table, rclass
 				hasrejections			///
 				ar_level(integer 0)		///
 				k_level(integer 0)		///
-				gamma_level(integer 0)		///
 				j_level(integer 0)		///
 				kj_level(real 0)		///
 				clr_level(integer 0)	///
@@ -6274,20 +6378,21 @@ program compute_a_min, rclass
 	syntax [,       					///
 				nexexog(integer 0)		///
 				nendog(integer 0)		///
+				nsendog(integer 0)		///
 				alpha(integer 0)		///
 				gamma(integer 0)		///
 			]
 
-	tempname a_min k_df j_df fh a g lc_2sls_crit
-	local k_df		= `nendog'
-	local j_df		= `nexexog'-`nendog'
+	tempname a_min k_df j_df fh a g lc_2sls_crit a_min_p lc_2sls_crit_p
+	local k_df		= `nendog' - `nsendog'
 	local a			= 100-`alpha'
-	local g			= 100-`gamma'
+	local g			= `gamma'
 // The first column is alpha, the second column is gamma
 // The third column p and the fourth column is k
 // The fifth column returns the a_min and the sixth column returns lc_2sls_crit
 	!awk -F"," '($1=="`a'")&&($2=="`g'")&&($3 =="`k_df'")&& ($4 == "`nexexog'") { print $5,$6 > "a.tmp"}' "a_min.csv"
- 
+ 	!awk -F"," '($1=="`a'")&&($2=="`g'")&&($3 =="1")&& ($4 == "`nexexog'") { print $5,$6 >> "a.tmp"}' "a_min.csv"
+
  	file open `fh' using a.tmp, read
 	file read `fh' line
 	local linenum = 0
@@ -6303,7 +6408,10 @@ program compute_a_min, rclass
 
 	tokenize `o1', parse(" ")
 	return local a_min = `1'
-	return local lc_2sls_crit = `2'		
+	return local lc_2sls_crit = `2'	
+	tokenize `o2', parse(" ")	
+	return local a_min_p = `1'
+	return local lc_2sls_crit_p = `2'
 
 end    // end compute_a_min
 
@@ -6316,7 +6424,9 @@ void compute_tests(												///
 							scalar nendog,						///
 							scalar nexexog,						///
 							scalar a_min,						/// weight in linear combination  of K_2sls and J
+							scalar a_min_p,						/// weight in linear combination of K_2sls and J for projection test statistics p=1
 							scalar lc_2sls_crit,					/// dont need lc_2sls_crit in computing test stat
+							scalar lc_2sls_crit_p,					/// dont need lc_2sls_crit in computing test stat for projection test
 							string scalar del_z_name,			/// row vector
 							string scalar var_del_name,			///
 							string scalar pi_z_name,			///
@@ -6458,7 +6568,31 @@ timer_on(1)
 		k_2sls			= r'*zz* pi_beta * aux4inv * pi_beta'*zz*r
 		// Calculate the linear combination test statistic - not sure what to name
 		lc_2sls			= k_2sls + a_min*ar_chi2
+		
+		// Calculate projection test statistic
+		dwd			=invsym(pi_beta'*zz* pi_beta)
+		bread 			=r'*zz* pi_beta *dwd
+		meat			= dwd *aux4 * dwd
+// endog first weak, then strong endog
+		nwendog			=rows(wnullvector) // wnullvector is column vector of weakly-identified endog null
+		k_2slsp = J(1, nwendog,0)
+		lc_2slsp = J(1, nwendog,0)
+		for (i=1; i<=nwendog; i++) {
+			k_2slsp[1,i]=(1/meat[i,i])*bread[1,i]*bread[1,i]
+			lc_2slsp[1,i]= k_2slsp[1,i] + a_min_p*ar_chi2
+		}
 
+/* slower method for calculating the projection test statistic
+		F1=J(nendog,1,0)					//  create projection vector for the first parameter
+		F1[1,1]=1
+		F2=J(nendog,1,0)					//  create projection vector for the second parameter
+		F2[2,1]=1
+
+		k_2sls_p1   		= r'*zz* pi_beta *dwd*F1* (1/meat[1,1]) *F1'*dwd * pi_beta'*zz*r
+		k_2sls_p2   		= r'*zz* pi_beta *dwd*F2* (1/meat[2,2]) *F2'*dwd * pi_beta'*zz*r
+		printf("%9.0g\n", k_2sls_p1)
+		printf("%9.0g\n", k_2sls_p2)
+*/
 // return test stats in r()
 		st_numscalar("r(ar_chi2)", ar_chi2[1,1])
 		st_numscalar("r(k_chi2)", k_chi2[1,1])
@@ -6468,6 +6602,8 @@ timer_on(1)
 		st_numscalar("r(rk)", rk[1,1])
 		st_numscalar("r(clr_stat)", clr_stat[1,1])
 		st_numscalar("r(npd)", npd)
+		st_matrix("r(lc_2slsp)", lc_2slsp)
+		st_matrix("r(k_2slsp)", k_2slsp)
 timer_off(1)
 
 }
@@ -7087,9 +7223,16 @@ void s_wald(									///
 		npd = 1
 	}
 	wald_chi2 = rwald' * aux0
+	// wald test statistic for each component's projection test
+	nwendog = rows(var_wbeta)
+	wald_chi2p = J(1,nwendog,0)
+	for (i=1; i<=nwendog; i++) {
+		wald_chi2p[1,i]=rwald[i,1]*(1/var_wbeta[i,i])*rwald[i,1]
+	}
 
 	st_numscalar("r(wald_chi2)",wald_chi2)
 	st_numscalar("r(npd)",npd)
+	st_matrix("r(wald_chi2p)", wald_chi2p)
 }
 end
 
@@ -7140,7 +7283,8 @@ version 11.2
 mata:
 real matrix project_test(										///
 							scalar vnum,						/// has column number of weak var in question
-							pointer p,							///
+							scalar lc_2sls_col,			/// has column number of LC_2sls rejection indicator
+							pointer p,						///
 							scalar points,						///
 							string scalar pointsvec,			///
 							string scalar colsvec,				///
@@ -7151,13 +7295,13 @@ real matrix project_test(										///
 	gridpoints		=strtoreal(tokens(pointsvec))
 	gridcols		=strtoreal(tokens(colsvec))
 	levels			=strtoreal(tokens(levelsvec))
-	rtable			= (100*(*p)[.,gridcols]) :< (100 :- levels)					//  missings => zeros (thus included in CI)
-	rtable			= (*p)[.,vnum], rtable										//  append column 1 with grid nulls for sorting
+	rtable			= (100*(*p)[.,gridcols]) :< (100 :- levels)	//  missings => zeros (thus included in CI)
+	rtable			= (*p)[.,vnum], rtable, (*p)[., lc_2sls_col]	//  append column 1 with grid nulls for sorting and last column LC_2sls_r
 	_sort(rtable, 1)															//  ... and sort on nulls in col 1
 
-	pcitable = J(0, 1+cols(gridcols), 1)										//  initialize new CI table
+	pcitable = J(0, 1+cols(gridcols)+1, 1)					//  initialize new CI table - column 1 with grid nulls ans last one for LC_2sls
 	
-	pointsi=gridpoints[1,vnum]													//  points in grid for variable vnum
+	pointsi=gridpoints[1,vnum]						//  points in grid for variable vnum
 	blocksize=points/pointsi
 	
 
@@ -7251,7 +7395,10 @@ program compute_pvals, rclass
 				nsendog(integer 0)		/// also boolean for strongly-IDed vars
 				ncsendog(integer 0)		/// also boolean for subset AR test
 				a_min(real 0)			///
+				a_min_p(real 0)			///
 				lc_2sls_crit(real 0)            /// critical value of the linear combination distribution
+				lc_2sls_crit_p(real 0)          /// critical value of the linear combination distribution
+				lc_2slsp(name local)		/// row vector of lc_2sls test statistics for projection tests
 				ar_chi2(real 0)			///
 				k_chi2(real 0)			///
 				lc_2sls(real 0)			///
@@ -7261,6 +7408,7 @@ program compute_pvals, rclass
 				wald_chi2(real 0)		///
 				rk(real 0)				///
 				 *]
+		 
 timer on 2
 	tempname wald_p ar_p clr_p kj_p k_p lc_2sls_p j_p rk_p
 	
@@ -7317,11 +7465,16 @@ timer on 2
 		}
 	}
 	
-* K_J linear combination with 2sls weight matrix.
+* linear combination with 2sls weight matrix.
 	if `overid' & ~`ncsendog' {	
 	// rather than calculating p-value, we calculate rejection is test stat<critical value
-	local lc_2sls_p = cond(`lc_2sls'<`lc_2sls_crit'	,1,0)								
-
+	local lc_2sls_p = cond(`lc_2sls'>`lc_2sls_crit'	,1,0)								
+	// also calculate rejection indicator for projection test for each component - save into a vector
+	// loop over the row vector of projection test statistis - faster than reading matrix into mata
+	forvalues i = 1/`k_df' {
+		local lc_2slsp`i'_p= cond(`lc_2slsp'[1,`i']>`lc_2sls_crit_p'	,1,0)
+		}
+		
 	}
 	
 	return scalar wald_df	=`wald_df'
@@ -7338,6 +7491,9 @@ timer on 2
 		return scalar lc_2sls_p		=`lc_2sls_p'
 		return scalar j_df		=`j_df'
 		return scalar j_p		=`j_p'
+		forvalues i = 1/`k_df' {
+			return scalar lc_2slsp`i'_p= `lc_2slsp`i'_p'
+		}
 	}
 timer off 2
 end // end of compute_pval
