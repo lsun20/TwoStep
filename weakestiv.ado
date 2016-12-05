@@ -1256,7 +1256,7 @@ di as err "         weakiv rk stat df=`rk_df'; ranktest id stat df=`idstat_df'
 						wbeta(`wbeta')				///
 						var_wbeta(`var_wbeta')		///
 						wald_level(`wald_level')	///
-						vnum(`vnum')						//  default vnum is 1 but provide anyway
+						vnum(`vnum')			
 					local p`vnum'_wald_cset	"`r(wald_cset)'"
 			* use Wald's cset instead	
 				
@@ -1441,7 +1441,7 @@ di as err "         weakiv rk stat df=`rk_df'; ranktest id stat df=`idstat_df'
 				ereturn local p`vnum'_lc_2sls_cset		"`p`vnum'_lc_2sls_cset'"
 				ereturn local p`vnum'_clr_cset			"`p`vnum'_clr_cset'"
 			}
-			ereturn scalar gamma_hat_p`i' = `gamma_hat`i''		// distortion cutoff for projection test
+			ereturn scalar gamma_hat_p`vnum' = `gamma_hat`vnum''		// distortion cutoff for projection test
 		}
 		ereturn local	pwendo			"`pwendo'"
 		local			pwendo_nlist	: list sort pwendo_nlist			//  put in correct order before storing in e(.)
@@ -2375,7 +2375,7 @@ program define display_output
 		di as txt "{p}CLR distribution and p-values obtained by simulation (`e(clrsims)' draws).{p_end}"
 	}
 	if e(grid) & strpos("`e(citestlist)'", "lc_2sls") {
-		di as text "{p}LC_2sls maximal coverage distortion is" %5.0f e(gamma_level) "%; distortion cutoff is `e(gamma_hat)'%, obtained by simulation 10^6 draws).{p_end}"
+		di as text "{p}LC_2sls gamma_min is" %5.0f e(gamma_level) "%; distortion cutoff is `e(gamma_hat)'%, obtained by simulation 10^6 draws).{p_end}"
 
 	}
 	local Ntext "`e(N)'"
@@ -2439,7 +2439,8 @@ program define display_output
 				}
 			}
 			di as txt "{hline 71}"
-			di as text "{p}LC_2sls maximal coverage distortion is " ///
+			di as txt "{p} Wald confidence set for the parameter of interest is based on `e(waldcmd)' point estimate and its standard error, rather than grid search.{p_end}"
+			di as text "{p}LC_2sls gamma_min is " ///
 				%5.0f e(gamma_level) "%; distortion cutoff is " %5.3f e(gamma_hat_p`vnum') "%, obtained by simulation 10^6 draws).{p_end}"
 
 		}
@@ -4922,7 +4923,7 @@ di as err "syntax error - variable listed in project(.) but not in endogenous"
 				wbeta(`wbeta')				///
 				var_wbeta(`var_wbeta')		///
 				wald_level(`wald_level')	///
-				vnum(`vnum')						//  default vnum is 1 but provide anyway
+				vnum(`vnum')		
 			local p`vnum'_wald_cset	"`r(wald_cset)'"
 			* use Wald's cset instead	
 
@@ -5630,15 +5631,7 @@ timer on 4
 		if `nsendog' {
 			local cnames "`cnames' `sendo'"				//  additional columns for strongly-IDed betas
 		}
-/* The last columns in grid: a_diff and a_diff`i' for calculating LC_2sls distortion cutoff
-		local a_diff "a_diff"
-		forvalues i=1/`nwendog' {
-			local a_diff "`a_diff' a_diff`i'"			
-		}
-*/
-// dont't need to add the a_diff columns here anymore - added to gridcols in the beginning DELETE
-* and append names of columns in gridcols
-*		local cnames	"`cnames' `gridcols' `a_diff'"
+
 		local cnames	"`cnames' `gridcols'"
 		local cnames	: list clean cnames
 		local cnum		: list sizeof cnames			//  number of columns for grid
@@ -6191,7 +6184,6 @@ timer on 8
 			// gridcols is a nested local macro, containing test stats locals.
 			// save all test stats in a local first and directly convert to mata is much faster
 			// add gridnullvector to the first column and a_diff the last column
-			*local gridcols_temp "`gridcols_temp' `a_diff_f'" // DELETE don't need to append a_diff to the end now
 dis "gridcols_temp is `gridcols_temp'"
 			mata: `cirow' = `gridnullvector', strtoreal(tokens(st_local("gridcols_temp")))
 
