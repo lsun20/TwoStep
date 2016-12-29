@@ -621,12 +621,13 @@ di as err "Fixed-effects estimation requires data to be -xtset-"
 
 * Misc
 	local npd=0
-	
+/* dont need this ?! not feeding in compute_test argument anymore
 	compute_a_min,nendog(`nendog') nsendog(`nsendog') nexexog(`nexexog') alpha(`k_level') gamma(`gamma_level')
 	local a_min = `r(a_min)'
 	local lc_2sls_crit = `r(lc_2sls_crit)'
 	local a_min_p = `r(a_min_p)'
 	local lc_2sls_crit_p = `r(lc_2sls_crit_p)'
+*/
 	// tabulate the 1-alpha (k_level) quantile of chi2 with dg nendog - nsendog
 	local invchi2_k_df = invchi2(`nendog'-`nsendog', `k_level'/100)
 	// tabulate the 1-alpha quantile of chi2 with dg 1 for projection test (for each component)
@@ -1330,8 +1331,8 @@ di as err "         weakiv rk stat df=`rk_df'; ranktest id stat df=`idstat_df'
 	ereturn scalar	sendo_ct			=`nsendog'		//  #strong endog
 	ereturn scalar	tinexog_ct			=`ntinexog'		//  #exogenous regressors included in tests
 	ereturn scalar	exexog_ct			=`nexexog'		//  #excluded exogenous (IVs)
-	ereturn scalar  a_min				=`a_min'		// weight in linear combination of K and J
-	ereturn scalar  lc_2sls_crit			=`lc_2sls_crit'		// critical value of the linear combination distribution
+*	ereturn scalar  a_min				=`a_min'		// weight in linear combination of K and J
+*	ereturn scalar  lc_2sls_crit			=`lc_2sls_crit'		// critical value of the linear combination distribution
 	ereturn local	cmd 				"weakiv"
 	ereturn local	waldcmd				"`waldcmd'"
 	ereturn local	depvar				"`depvar'"
@@ -2260,12 +2261,13 @@ program define display_output
 	}
 	di
 //if "`e(citestlist)'" != "" & e(wendo_ct) == 1 {
+
 	if e(ci) {
 		di as txt "{p}{helpb weakiv##interpretation:Weak instrument robust tests and confidence sets for `e(ivtitle)' `modeltext'}{p_end}"
 		if "`e(citestlist)'" != "" {
 			di as txt "{p}Confidence sets based on `e(citestlist)' tests are shown below.{p_end}"
 		}
-	}
+	} 
 	if "`e(citestlist)'" != "" & e(wendo_ct) > 1 {
 		di as txt "{p}{helpb weakiv##interpretation:Weak instrument robust tests for `e(ivtitle)'}{p_end}"
 		di as txt "{p}Full confidence sets based on `e(citestlist)' tests are stored in e(citable).{p_end}"
@@ -2274,7 +2276,7 @@ program define display_output
 		di as txt "{p}{helpb weakiv##interpretation:Weak instrument robust tests for `e(ivtitle)'}{p_end}"
 		di as txt "{p}You didn't specify any tests/projection-based tests.{p_end}"
 		di as txt "{p}To calculate full confidence sets, specify citestlist().{p_end}"
-		di as txt "{p}To calculate marginal considence sets, specify project().{p_end}"
+		di as txt "{p}To calculate marginal confidence sets, specify project().{p_end}"
 	}
 	if "`e(citestlist)'" == "" & e(pwendo_ct) > 0&e(pwendo_ct)!= .& "`e(ptestlist)'" != "" {
 		di as txt "{p}{helpb weakiv##interpretation:Weak instrument robust tests for `e(ivtitle)'}{p_end}"
@@ -2366,7 +2368,7 @@ program define display_output
 		else {
 			local pointstext "(`e(points_descript)')"
 		}
-		di as txt "{p}Confidence sets (if calculated) estimated for `pointstext' points in `e(grid_descript)'.{p_end}"
+		di as txt "{p}Confidence sets (if calculated) based on `pointstext' points in `e(grid_descript)'.{p_end}"
 	}
 	else if e(overid) & ~e(csendo_ct) & e(ci) {
 		di as txt "{p}{helpb weakiv##closedform:(*)}J/K-J conf. sets {helpb weakiv##closedform:unavailable with closed-form estimation}.{p_end}"				
@@ -2375,7 +2377,7 @@ program define display_output
 		di as txt "{p}CLR distribution and p-values obtained by simulation (`e(clrsims)' draws).{p_end}"
 	}
 	if e(grid) & strpos("`e(citestlist)'", "lc_2sls") {
-		di as text "{p}LC_2sls gamma_min is" %5.0f e(gamma_level) "%; distortion cutoff is `e(gamma_hat)'%, obtained by simulation 10^6 draws).{p_end}"
+		di as text "{p}LC_2sls gamma_min is" %5.0f e(gamma_level) "%; distortion cutoff is `e(gamma_hat)'%, obtained by 10^6 simulation draws).{p_end}"
 
 	}
 	local Ntext "`e(N)'"
@@ -2439,9 +2441,11 @@ program define display_output
 				}
 			}
 			di as txt "{hline 71}"
+			di "{ralign 5:Wald}{center 20:`level_wald'}{res}{center 50:`e(p`vnum'_wald_cset)'}"
+			di as txt "{hline 71}"
 			di as txt "{p} Wald confidence set for the parameter of interest is based on `e(waldcmd)' point estimate and its standard error, rather than grid search.{p_end}"
 			di as text "{p}LC_2sls gamma_min is " ///
-				%5.0f e(gamma_level) "%; distortion cutoff is " %5.3f e(gamma_hat_p`vnum') "%, obtained by simulation 10^6 draws).{p_end}"
+				%5.0f e(gamma_level) "%; distortion cutoff is " %5.3f e(gamma_hat_p`vnum') "%, obtained by 10^6 simulation draws).{p_end}"
 
 		}
 
@@ -2586,14 +2590,8 @@ program define get_option_specs, rclass
 			testlist(string)					/// list of tests for full vector - to be taken out
 			ptestlist(string)					/// list of tests for one endogenous variable using projection method
 			citestlist(string)					/// list of tests for full vector
-			LEVELlist(numlist min=0 max=3)										///
-			arlevel(numlist min=1 max=1)										///
-			jlevel(numlist min=1 max=1)											///
-			kjlevel(numlist min=1 max=2)										///
-			waldlevel(numlist min=1 max=1)										/// illegal option - capture it
-			klevel(numlist min=1 max=1)											/// illegal option - capture it
-			clrlevel(numlist min=1 max=1)										/// illegal option - capture it
-			gammalevel(numlist min=1 max=1)										/// illegal option - capture it
+			level(numlist min=1 max=1)				/// confidence level
+			gammalevel(numlist min=1 max=1)				/// distortion level
 			kwt(real 0)															///
 			lm md																///
 			cuepoint															///
@@ -2643,24 +2641,7 @@ di as res "          for 2-variable projection-based inference; graph option ign
 		local graph	""
 	}
 
-* Check all provided confidence levels.
-* Stata's definition of a legal level is >=10 and <=99.99
-	foreach lev in `levellist' `arlevel' `jlevel' `kjlevel'  {
-		if `lev'<10 | `lev'>=99.99	{									//  Stata's definition of a legal level
-di as err "illegal confidence level `lev': must be >=10 and <=99.99"
-			exit 198
-		}
-	}
-	if "`gammalevel'" == "" {
-		local gamma_level = 5 
-	}
-	else if	inlist(`gammalevel', 1, 5, 10, 15, 20) == 0 {
-di as err "error - gamma is out of range - need to calculate it" // gamma_level not in a_min.csv
-		exit 198
-	}
-	else {
-		local gamma_level = `gammalevel'
-	}
+
 * LM vs MD indicated by `lm' macro. `lm'=="lm" => LM, `lm'=="" => MD.
 * Check legality
 	if ("`lm'"=="lm") & ("`md'" == "md") {
@@ -2704,45 +2685,42 @@ di as err "illegal option - cuepoint option supported only for linear IV models"
 	}
 
 ******* Test levels ************
-* Default level is system-determined
-* `levellist' is list of significance levels provided by user (max 3)
-* `level' is the first and the one used for testing
-	if "`levellist'"=="" {
-		local level		"`c(level)'"
-		local levellist	"`c(level)'"
+* Default level is system-determined at 95%, gamma is set to 5%
+* level and gammalevel may be supplied by the user, but need to check legality
+* LC weights a_min is calculated for the following range.
+	if "`level'" == "" {
+		local level = 95
+	} 
+	else if inlist(`level', 99,98,95,90,85,80) == 0 {
+di as err "error - confidence level is out of range - set to default 95% level" // alpha_level not in a_min.csv
+		local level = 95
 	}
 	else {
-		tokenize `levellist'						//  order provided
-		local level		"`1'"						//  first level provided used for tests
+		local level = `level'
 	}
-* AR and J levels
-	if "`arlevel'"=="" {							//  not specified, use default
-		local ar_level	"`level'"
+
+	if "`gammalevel'" == "" {
+		local gamma_level = 5 
 	}
-	else {											//  must be legal
-		local ar_level	"`arlevel'"
-	}
-	if "`jlevel'"=="" {								//  not specified, use default
-		local j_level	"`level'"
-	}
-	else {											//  must be legal
-		local j_level	"`jlevel'"
-	}
-* Minimal value of coverage distortion gamma, if not specified set to default value
-	if "`gammalevel'"=="" {
-		local gamma_level	=5
+	else if	inlist(`gammalevel', 1,2,5,10,15,20) == 0 {
+di as err "error - gamma is out of range - set to default 5% level" // gamma_level not in a_min.csv
+		local gamma_level = 5 
 	}
 	else {
-		local gamma_level	"`gammalevel'"
+		local gamma_level = `gammalevel'
 	}
-* K, CLR and Wald test levels are the default test level - all are tests of parameter only
+	
+
+* AR, J, K, CLR and Wald test levels are the default test level - all are tests of parameter only
 * Capture if attempted to set separately
+	local ar_level		"`level'"
+	local j_level		"`level'"
 	local k_level		"`level'"
 	local clr_level		"`level'"
 	local wald_level	"`level'"
-	if "`klevel'`clrlevel'`waldlevel'" ~= "" {
-di as err "illegal option: test level for K, CLR and Wald cannot be set separately"
-di as err "use -level(.)- option to set test level for these parameter-only tests"
+	if "`arlevel'`jlevel'`klevel'`clrlevel'`waldlevel'" ~= "" {
+di as err "illegal option: test level for AR, J, K, CLR and Wald cannot be set separately"
+di as err "use -level(.)- option to set test level for these tests"
 		exit 198
 	}
 
@@ -2780,28 +2758,7 @@ di as err "incompatible options: kjlevel(.) and kwt(.)"
 	local usegrid		=("`usegrid'"=="usegrid")
 	local forcerobust	=("`forcerobust'"=="forcerobust")
 
-* Stata default clrsims = -1 => user hasn't provided value, use Mikusheva-Poi method (leave at -1) or 10k reps
-* clrsims = 0 => user doesn't want sim method used, use Mikusheva-Poi method (set to -1) or nothing (leave at 0)
-* clrsims > 0 => user wants sim method used with specified #sims, don't use Mikusheva-Poi method even if possible
-* if CLR stat not needed, set =-1
-	if ~`overid' | `ncsendog' {									//  exactly-IDed or subset AR so CLR not needed
-		local clrsims		= 0									//  neither sims nor M-P method needed
-	}
-	else if `clrsims'==0 {										//  user doesn't want sim method, so use M-P or nothing
-		if `nwendog'==1 & `nsendog'==0 {						//  M-P method is default for K=1 case and no strong endog
-			local clrsims	= -1
-		}
-	}
-	else if `clrsims'==-1 {										//  user didn't provide value, so go to default behavior, sims or M-P
-		if `nwendog'>1 | `nsendog'>0 {							//  must use simulation method
-			local clrsims	= 10000								//  default is 10k simulations
-		}														//  otherwise leave at -1 => M-P
-	}
 
-* So now:
-* clrsims=-1 => don't use sim method, use Mikusheva-Poi method for CLR p-value
-* clrsims=0  => don't use simulation method, no p-value provided
-* clrsims>0  => use simulation method
 
 * Default: CIs reported for K=1 case
 	local ci			=(`nwendog'==1)
@@ -2838,15 +2795,20 @@ di as err "incompatible options: kjlevel(.) and kwt(.)"
 	if `ci' & ("`model'" ~= "linear") {									//  use grid for CI if ivprobit or ivtobit
 		local usegrid	=1
 	}
-	if `ci' & (`clrsims'>0) {											//  use grid for CI if simulation method for CLR
-		local usegrid	=1												//  since closed-form code won't work
-	}
+
 
 * closedform code for CIs uses Mikusheva-Poi method rather than grid search
 * works for iid linear models with #wendog=1, no strong and not subset-AR
 * overridden if usegrid is already indicated
 	local closedform	=(~`usegrid' & "`model'"=="linear" & `iid' & `nwendog'==1 & ~`nsendog' & ~`ncsendog')
-
+	
+* Since we do not perform point hypothesis test, we require the user to specify usegrid (if not using closedform).
+	if `usegrid' == 0 & `closedform' == 0 {
+di as err "Please specify usegrid or other grid options to calculate confidence intervals and sets."
+di as err "If you have  more than one weak endogenous variables, either specify project() to calculate marginal confidence sets (recommended),"
+di as err "or specify citestlist() to calculate full confidence sets."
+	exit 198
+	}
 * Check if test lists provided by the users are legal
 	if "`citestlist'" != "" {
 		local citestlist = lower("`citestlist'")
@@ -2869,7 +2831,7 @@ di as err "citestlist option error - LC_2sls is recommended" // some bug in coll
 * Default test lists and CI methods
 * CI method is grid-based except if K=1, iid and no strong
 * when closed-form CIs are available
-	if ~`ncsendog' & `iid' & ~`nsendog' & ~`usegrid' & ~`forcerobust' {		//  closed form - iid, nsendog=0, non-subset only
+	if `closedform' {		//  closed form - iid, nsendog=0, non-subset only
 		*local testlist			"clr k j kj ar"
 		local citestlist		"clr k ar"
 		local testlist  "`citestlist'"									//  j and kj CIs not available for closed-form method
@@ -2884,6 +2846,11 @@ di as err "citestlist option error - LC_2sls is recommended" // some bug in coll
 			}
 		local testlist   "`citestlist'"
 		local ptestlist			""
+			if "`project'" != "" {
+di as err "projection option error - there is only one weak endogenous variable."
+di as err "to calculate confidence set, you do not need to specify project()."
+			exit 198
+			}
 		}
 	* if #wendog>1, the default is to calculate only ptestlist. 
 	* if the user specifies citestlist, then we calculate confidence sets for the full vector	
@@ -2893,11 +2860,21 @@ di as err "citestlist option error - LC_2sls is recommended" // some bug in coll
 			local citestlist		""
 			}
 		local testlist  "`citestlist'"
-		local ptestlist			"wald lc_2sls" 
+		*local ptestlist			"wald lc_2sls" 
+		local ptestlist			"lc_2sls" 
+		* if project() is empty, prompt the user to specify
+		if "`project'" == "" & "`citestlist'" == "" {
+di as err "project option error - there are more than one weak endogenous variables."
+di as err "either specify project() to calculate marginal confidence sets (recommended)," 
+di as err "or specify citestlist() to calculate full confidence sets." 
+		exit 198		
+			}
 		}
-		
+	
 		if `usegrid' {
-			local gridcols "wald_chi2 ar_chi2 k_chi2 lc_2sls j_chi2 clr_stat wald_p ar_p k_p lc_2sls_r j_p kj_p clr_p rk rk_p a_diff_f"
+			*local gridcols "wald_chi2 ar_chi2 k_chi2 lc_2sls j_chi2 clr_stat wald_p ar_p k_p lc_2sls_r j_p kj_p clr_p rk rk_p a_diff_f"
+			local gridcols "ar_chi2 k_chi2 lc_2sls j_chi2 clr_stat ar_p k_p lc_2sls_r j_p kj_p clr_p rk rk_p a_diff_f"
+			* we do not neet point wald test statistics, only for LC_2sls
 			* construct a full list of stats that will be stored in citable - drop them if not specified in citestlist
 			* add the rejection indicator for LC_2sls projection tests, and the a_minp (for distortion cutoff)
 			if `nwendog' > 1 & strpos("`ptestlist'", "lc_2sls"){
@@ -2933,34 +2910,32 @@ di as err "citestlist option error - LC_2sls is recommended" // some bug in coll
 				local gridcols =subinstr("`gridcols'", "lc_2sls ", " ", .) // need to include the space otw lc_2slsp1 gets replaced
 				local gridcols =subinstr("`gridcols'", "lc_2sls_r", "", .)
 				local gridcols =subinstr("`gridcols'", "a_diff_f", "", .)
-			}
-
-
-
-* Take out RK tests?
-
-/*
-			local gridcols				///
-							wald_chi2	///
-							ar_chi2		///
-							k_chi2		///
-							lc_2sls	///
-							j_chi2		///
-							clr_stat	///
-							wald_p		///
-							ar_p		///
-							k_p			///
-							lc_2sls_r		///
-							j_p			///
-							kj_p		///
-							clr_p		///
-							rk			///
-							rk_p
-*/
+			} 
 		}
 	}
+* Stata default clrsims = -1 => user hasn't provided value, use Mikusheva-Poi method (leave at -1) or 10k reps
+* clrsims = 0 => user doesn't want sim method used, use Mikusheva-Poi method (set to -1) or nothing (leave at 0)
+* clrsims > 0 => user wants sim method used with specified #sims, don't use Mikusheva-Poi method even if possible
+* if CLR stat not needed, set =-1
+	if !strpos("`citestlist'", "clr") {		//  If CLR test is not specified, then set to 0
+		local clrsims		= 0					//  neither sims nor M-P method needed
+	}
+	else if `clrsims'==-1 & strpos("`citestlist'", "clr") {					//  user didn't provide value, so go to default behavior, sims or M-P
+		if `nwendog'==1 & `nsendog'==0 {						//  M-P method is default for K=1 case and no strong endog
+			local clrsims	= -1
+		}
+		if `nwendog'>1 | `nsendog'>0 {							//  must use simulation method
+			local clrsims	= 10000							//  default is 10k simulations
+		}										
+	}
+
+* So now:
+* clrsims=-1 => don't use sim method, use Mikusheva-Poi method for CLR p-value
+* clrsims=0  => don't use simulation method, no p-value provided; or CLR test is not requested
+* clrsims>0  => use simulation method 
 * And above overridden if exactly-ID or subset AR, when only AR is available
 	if ~`overid' | `ncsendog' {
+dis as text "exactly-identified model: only AR test is conducted"
 		local testlist		"ar"
 	 	local citestlist	"ar"
 	 	local ptestlist		"ar wald"
@@ -2971,11 +2946,13 @@ di as err "citestlist option error - LC_2sls is recommended" // some bug in coll
 							wald_p		///
 							ar_p
 		}
+		/*
 		if ~`ncsendog' {				//  exactly-ID but not subset AR, so rank test available
 			local gridcols	`gridcols'	///
 							rk			///
 							rk_p
 		}
+		*/
 	}
 
 * Grid settings
@@ -6001,17 +5978,25 @@ timer off 9
 
 * calculate test stats
 
-* Wald test. Works for all cases.
+* Wald test. Only needed when either LC_2sls (lc_2sls_r as a flag)
+* or LC_2sls projection test is performed (lc_2slsp as a flag)
+* The Wald statistics are used for distortion cutoff.
 timer on 10
+		if  strpos("`gridcols'", "lc_2sls_r") | strpos("`gridcols'", "lc_2slsp") {
+		local lc_2sls_col: list posof "lc_2sls_r" in gridcols
 			mata: s_wald(							///
+							`lc_2sls_col',			/// flag for whether wald_chi2 is needed
 							"`var_wbeta'",			///
 							"`wbeta'",				/// row vector
 							"`wgridnullvector'"		/// rowvector
 							)
-			local wald_chi2		=r(wald_chi2)
+			if `lc_2sls_col' >0 {				
+				local wald_chi2		=r(wald_chi2)
+				local npd			=max(`npd',r(npd))	//  promote to 1 if npd matrix ever encountered
+			}
 			tempname wald_chi2p
 			mat `wald_chi2p' 	=r(wald_chi2p)			// row vector that stores Wald stat for projection test
-			local npd			=max(`npd',r(npd))	//  promote to 1 if npd matrix ever encountered
+		}
 timer off 10
 * Weak-ID-robust tests
 
@@ -6313,15 +6298,19 @@ real matrix collapse_citable(									///
 	levels			=strtoreal(tokens(levelsvec))
 
 	rtable			= (100*(*p)[.,gridcols]) :< (100 :- levels)
-	rtable			= (*p)[.,1], rtable, (*p)[., lc_2sls_col]
-	//  append column 1 with grid nulls and last column lc_2sls_r
+	if (lc_2sls_col>0) {
+		rtable			= (*p)[.,1], rtable, (*p)[., lc_2sls_col]
+	}
+	else {
+		rtable			= (*p)[.,1], rtable
+	}
+	//  append column 1 with grid nulls and last column lc_2sls_r, if lc_2sls is included in citestlist
 	smat1			= rowsum(rtable[.,2..cols(rtable)])
 	smat2			= smat1[(2::rows(smat1)),1]
 	smat1			= smat1[(1::rows(smat1)-1),1]
 	smat			= (smat1-smat2) :~= 0
 	smat			= (1 \ smat) :| (smat \ 1)
 	rtable			= select(rtable,smat)
-	
 	return(rtable)
 }
 end
@@ -6404,7 +6393,12 @@ program get_ci_from_table, rclass
 		mata: `rtable' = collapse_citable(`p', `lc_2sls_col', "`gridcols'", "`testlevels'")	//  create table of rejections and collapse
 																				//  (delete unnecessary rows)
 		mata: st_matrix("`rtable'",`rtable')
-		local rtcnames_full = "`rtcnames' lc_2sls_r"									//  copy from Mata into Stata
+		if `lc_2sls_col' >0 {
+			local rtcnames_full = "`rtcnames' lc_2sls_r"		//  copy from Mata into Stata, if LC_2sls test is included in citestlist
+		}
+		else {
+			local rtcnames_full = "`rtcnames'"
+		}
 		mat colnames `rtable'	= `rtcnames_full'									//  and name columns
 		mata: mata drop `rtable'												//  don't need Mata version of rejections table
 	}
@@ -6535,28 +6529,26 @@ program compute_a_min, rclass
 // The first column is alpha, the second column is gamma
 // The third column p and the fourth column is k
 // The fifth column returns the a_min and the sixth column returns lc_2sls_crit
-	!awk -F"," '($1=="`a'")&&($2=="`g'")&&($3 =="`k_df'")&& ($4 == "`nexexog'") { print $5,$6 > "a.tmp"}' "a_min.csv"
- 	!awk -F"," '($1=="`a'")&&($2=="`g'")&&($3 =="1")&& ($4 == "`nexexog'") { print $5,$6 >> "a.tmp"}' "a_min.csv"
 
- 	file open `fh' using a.tmp, read
+	file open `fh' using "a_min.txt", read
 	file read `fh' line
-	local linenum = 0
-	while r(eof)==0 {
-	    local linenum = `linenum' + 1
-	    scalar count = `linenum'
-	    local o`linenum' = `"`line'"'
-	    local no = `linenum'
-	    file read `fh' line
-	  }
+	while `=word("`line'",1)'!=`a'|`=word("`line'",2)'!=`g'|`=word("`line'",3)'!=`k_df'|`=word("`line'",4)'!=`nexexog' {
+		file read `fh' line	
+	}
+	tokenize `line', parse(" ")
+	return local a_min = `5'
+	return local lc_2sls_crit = `6'	
 	file close `fh'
-	!rm a.tmp
 
-	tokenize `o1', parse(" ")
-	return local a_min = `1'
-	return local lc_2sls_crit = `2'	
-	tokenize `o2', parse(" ")	
-	return local a_min_p = `1'
-	return local lc_2sls_crit_p = `2'
+	file open `fh' using "a_min.txt", read
+	file read `fh' line
+	while `=word("`line'",1)'!=`a'|`=word("`line'",2)'!=`g'|`=word("`line'",3)'!=1|`=word("`line'",4)'!=`nexexog' {
+		file read `fh' line	
+	}
+	tokenize `line', parse(" ")
+	return local a_min_p = `5'
+	return local lc_2sls_crit_p = `6'
+	file close `fh'
 
 end    // end compute_a_min
 
@@ -6621,7 +6613,6 @@ timer_on(1)
 		wnullvector		=wnullvector'
 
 		r = del_z - pi_z*nullvector
-
 // Assemble psi
 		if (iid) {
 			kron		= (del_v - nullvector)#I(nexexog)
@@ -6646,10 +6637,10 @@ timer_on(1)
 			npd = 1
 			aux1 = qrsolve(psi,r)
 		}
+		
 		// always calculate ar_chi2 because we need it for J, RK, CLR, LC_2sls
 		ar_chi2 = r' * aux1  	
 		st_numscalar("r(ar_chi2)", ar_chi2[1,1])
-
 		if (strpos(gridcols, " k_p")|strpos(gridcols, "j_p")|strpos(gridcols, "lc_2sls")) {			
 			if (iid) {								//  iid
 				aux0 = psi_inv * r * (del_v - nullvector)'
@@ -6659,6 +6650,8 @@ timer_on(1)
 				aux0 = var_pidel_z - var_pi_z*kron
 				vec_pi_beta = -vec(pi_z) + aux0*psi_inv*r
 			}
+
+						
 
 			pi_beta=J(nexexog,0,.)					//  un-vec pi_beta
 			for (i=1; i<=nendog; i++) {
@@ -6707,11 +6700,12 @@ timer_on(1)
 				clr_stat=.
 				rk=.
 			}
+			
 			if (strpos(gridcols, "rk_p")) {
-					st_numscalar("r(rk)", rk[1,1])
+				st_numscalar("r(rk)", rk[1,1])
 			}
-			clr_stat = .5*(ar_chi2-rk+sqrt((ar_chi2+rk)^2 - 4*j_chi2*rk))
 			if (strpos(gridcols, "clr_stat")) {
+				clr_stat = .5*(ar_chi2-rk+sqrt((ar_chi2+rk)^2 - 4*j_chi2*rk))
 				st_numscalar("r(clr_stat)", clr_stat[1,1])
 			}
 
@@ -7356,6 +7350,7 @@ end
 version 11.2
 mata:
 void s_wald(									///
+				scalar lc_2sls_col,		/// flag for whether wald_chi2 is needed
 				string scalar var_wbeta_name,	///
 				string scalar beta_name,		///
 				string scalar wnullvector_name	///
@@ -7374,12 +7369,16 @@ void s_wald(									///
 
 // Wald test
 	rwald = beta - b0
-	aux0 = cholsolve(var_wbeta,rwald)
-	if (aux0[1,1]==.) {
-		aux0 = qrsolve(var_wbeta,rwald)
-		npd = 1
+	if (lc_2sls_col >0){	
+		aux0 = cholsolve(var_wbeta,rwald)
+		if (aux0[1,1]==.) {
+			aux0 = qrsolve(var_wbeta,rwald)
+			npd = 1
+		}
+		wald_chi2 = rwald' * aux0
+		st_numscalar("r(wald_chi2)",wald_chi2)
+		st_numscalar("r(npd)",npd)
 	}
-	wald_chi2 = rwald' * aux0
 	// wald test statistic for each component's projection test
 	nwendog = rows(var_wbeta)
 	wald_chi2p = J(1,nwendog,0)
@@ -7387,8 +7386,7 @@ void s_wald(									///
 		wald_chi2p[1,i]=rwald[i,1]*(1/var_wbeta[i,i])*rwald[i,1]
 	}
 
-	st_numscalar("r(wald_chi2)",wald_chi2)
-	st_numscalar("r(npd)",npd)
+
 	st_matrix("r(wald_chi2p)", wald_chi2p)
 }
 end
