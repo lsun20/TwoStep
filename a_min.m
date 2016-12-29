@@ -1,8 +1,8 @@
 
 %Set number of simulations to use to critical values
 crit_sims=10^6;
-alpha_grid=[0.01 0.05 0.1 0.15 0.2];
-gamma_grid=[0.01 0.05 0.1 0.15 0.2];
+alpha_grid=[0.01 0.02 0.05 0.1 0.15 0.2];
+gamma_grid=[0.01 0.02 0.05 0.1 0.15 0.2];
 
 %Set up the matrix for output
 output=[];
@@ -33,33 +33,31 @@ crit_vec=zeros(length(p_k_mat),1);
 for i=1:length(alpha_grid)
 %Set nominal coverage for confidence sets: nominal coverage is 1-alpha
 alpha=alpha_grid(i);
+    for j=1:length(gamma_grid);
+    %Sets the values of gamma_min to be used in two-step confidence set
+    %construction
+    gamma_min=gamma_grid(j);
 
-%Sets the values of gamma_min to be used in two-step confidence set
-%construction
-gamma_min=gamma_grid(i);
+        for n=1:length(p_k_mat)
+            p=p_k_mat(n,1);
+            k=p_k_mat(n,2);
 
-    for n=1:length(p_k_mat)
-        p=p_k_mat(n,1);
-        k=p_k_mat(n,2);
-        
-        s = RandStream('mt19937ar','Seed',1);
-        RandStream.setGlobalStream(s)
-        K_size=sum(randn(crit_sims,p).^2,2);
-        J_size=sum(randn(crit_sims,k-p).^2,2);
-        
-        crit_quant=@(a) quantile((1+a)*K_size+a*J_size,1-alpha-gamma_min);
-        crit_obj=@(a) abs(chi2inv(1-alpha,p)-crit_quant(a));
-        a_min_vec(n)=fminsearch(crit_obj,0);
-        
-        crit_vec(n)=quantile((1+a_min_vec(n))*K_size+a_min_vec(n)*J_size,1-alpha);
+            s = RandStream('mt19937ar','Seed',1);
+            RandStream.setGlobalStream(s)
+            K_size=sum(randn(crit_sims,p).^2,2);
+            J_size=sum(randn(crit_sims,k-p).^2,2);
+
+            crit_quant=@(a) quantile((1+a)*K_size+a*J_size,1-alpha-gamma_min);
+            crit_obj=@(a) abs(chi2inv(1-alpha,p)-crit_quant(a));
+            a_min_vec(n)=fminsearch(crit_obj,0);
+
+            crit_vec(n)=quantile((1+a_min_vec(n))*K_size+a_min_vec(n)*J_size,1-alpha);
+        end
+    a = ones(length(p_k_mat),1)*100*alpha;
+    g = ones(length(p_k_mat),1)*100*gamma_min;
+
+    output=vertcat(output, horzcat(a,g,p_k_mat,a_min_vec,crit_vec));
     end
-
-a = ones(length(p_k_mat),1)*100*alpha;
-g = ones(length(p_k_mat),1)*100*gamma_min;
-
-output=vertcat(output, horzcat(a,g,p_k_mat,a_min_vec,crit_vec));
 end
 %%
-fname='a_min.csv'
-csvwrite(fname,output);
-
+dlmwrite('a_min.txt',output,'delimiter',' ')
