@@ -1292,6 +1292,7 @@ di as err "         weakiv rk stat df=`rk_df'; ranktest id stat df=`idstat_df'
 			ereturn local	kj_cset		"`kj_cset'"
 			ereturn local	j_cset		"`j_cset'"
 			ereturn local	k_cset		"`k_cset'"
+			ereturn local	k_2sls_cset	"`k_2sls_cset'"
 			ereturn local	lc_2sls_cset	"`lc_2sls_cset'"
 			ereturn local	lc_gmm_cset	"`lc_gmm_cset'"
 			ereturn local	clr_cset	"`clr_cset'"
@@ -1325,6 +1326,7 @@ di as err "         weakiv rk stat df=`rk_df'; ranktest id stat df=`idstat_df'
 				ereturn local p`vnum'_kj_cset			"`p`vnum'_kj_cset'"
 				ereturn local p`vnum'_j_cset			"`p`vnum'_j_cset'"
 				ereturn local p`vnum'_k_cset			"`p`vnum'_k_cset'"
+				ereturn local p`vnum'_k_2sls_cset		"`p`vnum'_k_2sls_cset'"
 				ereturn local p`vnum'_lc_2sls_cset		"`p`vnum'_lc_2sls_cset'"
 				ereturn local p`vnum'_lc_gmm_cset		"`p`vnum'_lc_gmm_cset'"
 				ereturn local p`vnum'_clr_cset			"`p`vnum'_clr_cset'"
@@ -2092,6 +2094,7 @@ program define display_output
 	local name_clr		: di "{txt}{ralign 7:{helpb twostepweakiv##CLR:CLR}}"
 	local name_ar		: di "{txt}{ralign 7:{helpb twostepweakiv##AR:AR}}"
 	local name_k		: di "{txt}{ralign 7:{helpb twostepweakiv##K:K}}"
+	local name_k_2sls	: di "{txt}{ralign 7:{helpb twostepweakiv##K_2sls:K_2sls}}"
 	local name_lc_2sls	: di "{txt}{ralign 7:{helpb twostepweakiv##LC_2sls:LC_2sls}}"
 	local name_lc_gmm	: di "{txt}{ralign 7:{helpb twostepweakiv##LC_gmm:LC_gmm}}"
 	local name_j		: di "{txt}{ralign 7:{helpb twostepweakiv##J:J}}"
@@ -2101,6 +2104,7 @@ program define display_output
 	local level_clr		: di %2.0f e(clr_level) "%"
 	local level_ar		: di %2.0f e(ar_level) "%"
 	local level_k		: di %2.0f e(k_level) "%"
+	local level_k_2sls		: di %2.0f e(k_level) "%"
 	local level_lc_2sls	: di %2.0f e(k_level) "%"
 	local level_lc_gmm	: di %2.0f e(k_level) "%"
 	local level_j		: di %2.0f e(j_level) "%"
@@ -2111,6 +2115,7 @@ program define display_output
 	local ci_clr		: di " {c |}{center 15:`level_clr'}{res}{center 22:`e(clr_cset)'}"
 	local ci_ar		: di " {c |}{center 15:`level_ar'}{res}{center 22:`e(ar_cset)'}"
 	local ci_k		: di " {c |}{center 15:`level_k'}{res}{center 22:`e(k_cset)'}"
+	local ci_k_2sls		: di " {c |}{center 15:`level_k_2sls'}{res}{center 22:`e(k_2sls_cset)'}"
 	local ci_lc_2sls	: di " {c |}{center 15:`level_lc_2sls'}{res}{center 22:`e(lc_2sls_cset)'}"
 	local ci_lc_gmm		: di " {c |}{center 15:`level_lc_gmm'}{res}{center 22:`e(lc_gmm_cset)'}"
 	local ci_wald		: di " {c |}{center 15:`level_wald'}{res}{center 22:`e(wald_cset)'}"
@@ -2122,7 +2127,7 @@ program define display_output
 		local ci_kj			: di " {c |}{center 15:`level_kj'}{res}{center 22:(*)}"
 		local ci_j			: di " {c |}{center 15:`level_j'}{res}{center 22:(*)}"
 	}
-	foreach testname in clr ar k lc_2sls lc_gmm j kj wald {
+	foreach testname in clr ar k k_2sls lc_2sls lc_gmm j kj wald {
 	
 		local cset		"`e(`testname'_cset)'"
 		local csetlen	: length local cset
@@ -2779,7 +2784,7 @@ di as err "or specify citestlist() to calculate full confidence sets."
 					local gridcols "`gridcols' k_2slsp`i'_r"
 				}
 			}
-			if `nwendog' > 1 & strpos("`ptestlist'", "k "){
+			if `nwendog' > 1 & (strpos("`ptestlist'", " k ")){ // efficient K test !!! need a proper name
 				forvalues i = 1/`nwendog' {
 					local gridcols "`gridcols' k_p`i'_r"
 				}
@@ -2788,10 +2793,10 @@ di as err "or specify citestlist() to calculate full confidence sets."
 				local gridcols =subinstr("`gridcols'", "ar_chi2", "", .)
 				local gridcols =subinstr("`gridcols'", "ar_p", "", .)
 			}
-			if !strpos("`citestlist'", "k") {
+			if !strpos("`citestlist'", "k ") | !strpos("`citestlist'", " k"){ // to avoid confusion with k_2sls
 				local gridcols =subinstr("`gridcols'", "kj_p", "", .)
 				local gridcols =subinstr("`gridcols'", "k_chi2", "", .)
-				local gridcols =subinstr("`gridcols'", " k_p", " ", .) // so that rk_p is not cut off
+				local gridcols =subinstr("`gridcols'", " k_p ", " ", .) // so that rk_p is not cut off and k_p1_r
 
 			}
 			if !strpos("`citestlist'", "j") {
@@ -2816,7 +2821,7 @@ di as err "or specify citestlist() to calculate full confidence sets."
 				local gridcols "`gridcols' lc_gmm lc_gmm_r a_diff_f"
 			} 
 			if strpos("`citestlist'", "k_2sls") {
-				local gridcols "`gridcols' k_2sls_r"
+				local gridcols "`gridcols' k_2sls k_2sls_r"
 			} 
 		}
 	}
@@ -5713,7 +5718,7 @@ program grid_recurse, rclass
 				wf(real 1)				///
 				forcerobust(integer 0)	///
 			]
-dis "what's wrong"			
+			
 timer clear
 timer on 3
 	tempname rk ar_p ar_chi2 ar_df k_p k_chi2 k_2sls lc_2sls lc_2sls_r lc_gmm lc_gmm_r k_df j_p j_chi2 j_df kj_p kj_chi2 ///
@@ -5721,6 +5726,7 @@ timer on 3
 		wald_p wald_chi2 wald_df wald_r
 	tempname wgridnullvector gridnullvector sbeta
 	tempname cirow a_diff
+
 * npd is flag set to 1 if npd matrices encountered
 	local npd = 0
 
@@ -5732,14 +5738,12 @@ timer on 3
 	local rest			: list clean rest
 	local moregrids		: length local rest
 dis "gridcols is `gridcols'"
-dis "this is `this' moregrids is `moregrids'"
+
 	foreach null in `this' {				//  loop through points of this gridlist
 	
 		local newnullvec		"`nullvec' `null'"
 
 		if `moregrids' {
-		dis "moregrids!"
-
 			grid_recurse,								///
 							gridcols(`gridcols')		///
 							citable(`citable')			///
@@ -5808,10 +5812,9 @@ dis "this is `this' moregrids is `moregrids'"
 		}
 		else {											//  we've stopped recursing so test nulls in current gridlist `this' 
 timer on 9
-
 			local counter = `counter'+1					//  about to do tests; increment by 1
 			_dots `counter' 0
-dis "counter is `counter'"
+
 			mata: `gridnullvector' = strtoreal(tokens("`newnullvec'"))			//  easiest way to put string into a matrix is via Mata
 			mata: st_matrix("`wgridnullvector'", `gridnullvector')
 			mat `gridnullvector'  = `wgridnullvector' 							//  So gridnull vector is in Mata and Stata
@@ -5907,6 +5910,7 @@ timer on 10
 		}
 timer off 10
 * Weak-ID-robust tests
+
 			if `ncsendog' {										/// subset AR test; requires IID and linearity
 
 * x1 is subset weakly identified (wendo), x2 complement (not in subset, not tested, coeffs obtained by LIML)
@@ -5985,9 +5989,6 @@ timer off 10
 			if strpos("`gridcols'", "k_chi2") {
 				local k_chi2		=r(k_chi2)
 			}
-			if strpos("`gridcols'", "k_2sls_r") { // use k_2sls_r in case k_2sls picks up the projection test statistics
-				local k_2sls		=r(k_2sls)	
-			}
 			if strpos("`gridcols'", "lc_2sls_r") { // use lc_2sls_r in case lc_2sls picks up the projection test statistics
 				local k_2sls		=r(k_2sls)
 				local lc_2sls		=r(lc_2sls)	
@@ -6008,14 +6009,6 @@ timer off 10
 			if strpos("`gridcols'", "rk") {
 				local rk			=r(rk)
 			}
-			if `nwendog' > 1 & strpos("`gridcols'", "k_2slsp") {	
-				tempname k_2slsp 
-				mat `k_2slsp'		=r(k_2slsp)
-			}
-			if `nwendog' > 1 & regexm("`gridcols'", "k_p[0-9]_r") {	
-				tempname k_chi2p 
-				mat `k_chi2p'		=r(k_chi2p)
-			}
 			if `nwendog' > 1 & strpos("`gridcols'", "lc_2slsp") {	
 				tempname k_2slsp lc_2slsp
 				mat `k_2slsp'		=r(k_2slsp)
@@ -6028,7 +6021,7 @@ timer off 10
 				mat `lc_gmmp'		=r(lc_gmmp)
 				local ar_chi2		=r(ar_chi2) // need k_chi2 and ar_chi2 to calculate a_min	
 			}
-dis "after computing test statistics gridcols is `gridcols'"
+dis "gridcols is `gridcols'"
 * calculate test statistics, p-values, and rejection indicators from above matrices
 			compute_pvals,					///
 				gridcols(`gridcols')			///
@@ -6048,7 +6041,6 @@ dis "after computing test statistics gridcols is `gridcols'"
 				lc_crit_p(`lc_crit_p')	///
 				ar_chi2(`ar_chi2')			///
 				k_chi2(`k_chi2')			///
-				k_2sls(`k_2sls')			///
 				lc_2sls(`lc_2sls')			///
 				lc_gmm(`lc_gmm')			///
 				j_chi2(`j_chi2')			///
@@ -6056,8 +6048,6 @@ dis "after computing test statistics gridcols is `gridcols'"
 				wald_chi2(`wald_chi2')		///
 				lc_2slsp(`lc_2slsp')			///
 				lc_gmmp(`lc_gmmp')			///
-				k_2slsp(`k_2slsp')			///
-				k_chi2p(`k_chi2p')			///
 				rk(`rk')					///
 				kwt(`kwt')
 
@@ -6071,13 +6061,11 @@ dis "after computing test statistics gridcols is `gridcols'"
 			if strpos("`gridcols'", "kj_p") {
 				local kj_p			=r(kj_p)
 			}
-			if strpos("`gridcols'", " k_p ") {// add space before and after to avoid confusion with k projection
+			if strpos("`gridcols'", " k_p") {
 				local k_p			=r(k_p)
 			}
-			if strpos("`gridcols'", "k_2sls_r") {
-				local k_2sls_r			=r(k_2sls_r)
-			}
 			if strpos("`gridcols'", "lc_2sls_r") {
+				local k_2sls_r			=r(k_2sls_r)
 				local lc_2sls_r			=r(lc_2sls_r)
 				dis "wald_chi2 is `wald_chi2'"
 				local a_diff_f= (`invchi2_k_df'-`k_2sls')/`ar_chi2'*cond(`wald_chi2'>`invchi2_k_df',1,0)
@@ -6096,27 +6084,15 @@ dis "after computing test statistics gridcols is `gridcols'"
 			if strpos("`gridcols'", "rk_p") {
 				local rk_p			=r(rk_p)
 			}
-			// store the rejection indicator for K_2sls projection tests in gridcols
-			if `nwendog' > 1 & strpos("`gridcols'", "k_2slsp") {
-				forvalues i=1/`nwendog' {
-					local k_2slsp`i'_r = r(k_2slsp`i'_r)
-				}		
-			}
-			// store the rejection indicator for K efficient projection tests in gridcols
-			if `nwendog' > 1 & regexm("`gridcols'", "k_p[0-9]_r") {
-				forvalues i=1/`nwendog' {
-					local k_p`i'_r = r(k_p`i'_r)
-				}		
-			}
+			
 			// store the rejection indicator for LC_2sls projection tests in gridcols
 			if `nwendog' > 1 & strpos("`gridcols'", "lc_2slsp") {
 
 				forvalues i=1/`nwendog' {
+					local k_2slsp`i'_r = r(k_2slsp`i'_r)
 					local lc_2slsp`i'_r = r(lc_2slsp`i'_r)
 					// and record a_diff for each projection test - need to return k_2slsp and calculate invchi2_1_df
 					local a_diffp`i'= (`invchi2_1_df'-`k_2slsp'[1,`i'])/`ar_chi2'*cond(`wald_chi2p'[1,`i']>`invchi2_1_df',1,0)
-					local temp = `k_2slsp'[1,`i']
-					dis "k_2slsp is `temp'"
 				}		
 			}
 			// store the rejection indicator for LC_gmm projection tests in gridcols
@@ -6164,7 +6140,6 @@ timer off 7
 timer off 3
 timer list
 timer clear
-dis "what's wrong?"
 end // end of grid_recurse
 
 program define construct_pcitable, rclass
@@ -6270,17 +6245,18 @@ version 11.2
 mata:
 real matrix collapse_citable(									///
 							pointer p,							///
-							scalar lc_col,			/// has columns number of lc_2sls_r
+							string scalar lc_cols,			/// has columns number of lc_2sls_r, lc_gmm_r, k_2sls_r
 							string scalar colsvec,				///
 							string scalar levelsvec				///
 							)
 {
 	
+	lc_col			=strtoreal(tokens(lc_cols))
 	gridcols		=strtoreal(tokens(colsvec))
 	levels			=strtoreal(tokens(levelsvec))
-
+printf("lc_col is %9.0g",lc_col[1,1]) // need to think abou tcases 
 	rtable			= (100*(*p)[.,gridcols]) :< (100 :- levels)
-	if (lc_col>0) {
+	if (lc_col[1,1]>0) {
 		rtable			= (*p)[.,1], rtable, (*p)[., lc_col]
 	}
 	else {
@@ -6361,10 +6337,8 @@ program get_ci_from_table, rclass
 	else {
 		//  original CI table with p-values besides lc_2sls, so need to calc rejections
 		local rtcnames			"null"
-		local lc_2sls 			"lc_2sls"
-		local lc_gmm			"lc_gmm"
-		local rtestlist : list testlist - lc_2sls
-		local rtestlist : list rtestlist - lc_gmm // we calculate rejection indicator for LC_2sls and LC_gmm in compute_pvals already
+		local rlist "lc_2sls lc_gmm k_2sls" // list of test that has rejection indicators already
+		local rtestlist : list testlist - rlist // we calculate rejection indicator for LC_2sls and LC_gmm in compute_pvals already
 		// rtestlist is the list of tests that need rejection indicators
 		foreach test of local rtestlist {
 			local rtcnames		"`rtcnames' `test'_r"
@@ -6372,6 +6346,7 @@ program get_ci_from_table, rclass
 		 	local gridcols		"`gridcols' `testcol'"
 		 	local testlevels	"`testlevels' ``test'_level'"
 		}
+		/* no longer needed - turn lc_col to vector
 		if strpos("`cnames'","lc_2sls_r"){
 			* LC_2sls has rejection indicator stored in main CI table:the variable name is lc_2sls_r and we exclude it from collapse_citable
 			local lc_col: list posof "lc_2sls_r" in cnames
@@ -6383,9 +6358,29 @@ program get_ci_from_table, rclass
 		else {
 			local lc_col = 0
 		}
-		mata: `rtable' = collapse_citable(`p', `lc_col', "`gridcols'", "`testlevels'")	//  create table of rejections and collapse
+		*/
+		local lc_cols "" // column numbers of rejections
+		foreach rejection of local rlist {
+			local testcol		: list posof "`rejection'_r" in cnames	//  table has rejection, hence "_r"
+		 	if `testcol' >0 { // if the test is in cnames, then append it
+			local lc_cols		"`lc_cols' `testcol'"
+			}
+		}
+		dis "rtestlist `rtestlist'"
+		dis "lc_cols is `lc_cols' gridcols is `gridcols'"
+		
+		mata: `rtable' = collapse_citable(`p', "`lc_cols'", "`gridcols'", "`testlevels'")	//  create table of rejections and collapse
 																				//  (delete unnecessary rows)
-		mata: st_matrix("`rtable'",`rtable')
+		mata: st_matrix("`rtable'",`rtable')	
+		local rtcnames_full = "`rtcnames'" //  copy from Mata into Stata
+		
+		foreach rejection of local rlist {
+			local testcol		: list posof "`rejection'_r" in cnames	//  table has rejection, hence "_r"
+		 	if `testcol' >0 { // if the test is in cnames, then append it to rtcnaes
+				local rtcnames_full = "`rtcnames_full' `rejection'_r"
+			}
+		}
+		/*
 		if strpos("`cnames'","lc_2sls_r") {
 			local rtcnames_full = "`rtcnames' lc_2sls_r"		//  copy from Mata into Stata, if LC_2sls test is included in citestlist
 		}
@@ -6395,6 +6390,7 @@ program get_ci_from_table, rclass
 		else {
 			local rtcnames_full = "`rtcnames'"
 		}
+		*/
 		mat colnames `rtable'	= `rtcnames_full'									//  and name columns
 		mata: mata drop `rtable'												//  don't need Mata version of rejections table
 	}
@@ -7584,13 +7580,12 @@ program compute_pvals, rclass
 				ncsendog(integer 0)		/// also boolean for subset AR test
 				a_min(real 0)			///
 				a_min_p(real 0)			///
-				invchi2_k_df(real 0)		/// critical value of chi2 df=k distribution 
-				invchi2_1_df(real 0)		/// critical value of chi2 df=1 distribution
+				invchi2_k_df(real 0)		///
+				invchi2_1_df(real 0)		///
 				lc_crit(real 0)            /// critical value of the linear combination distribution
 				lc_crit_p(real 0)          /// critical value of the linear combination distribution
 				ar_chi2(real 0)			///
 				k_chi2(real 0)			///
-				k_2sls(real 0)			///
 				lc_2sls(real 0)			///
 				lc_gmm(real 0)			///
 				j_chi2(real 0)			///
@@ -7599,8 +7594,6 @@ program compute_pvals, rclass
 				wald_chi2(real 0)		///
 				lc_2slsp(name local)		/// row vector of lc_2sls test statistics for projection tests
 				lc_gmmp(name local)		/// 
-				k_2slsp(name local)			///
-				k_chi2p(name local)			///
 				rk(real 0)				///
 				 *]
 		 
@@ -7642,13 +7635,6 @@ timer on 2
 			scalar `kj_p' = min(`p1',`p2')
 			return scalar kj_p		=`kj_p'
 		}
-	}
-* K with 2sls weight matrix 
-	if strpos("`gridcols'", "k_2sls_r") {	
-	dis "calculating k_2sls_r k_2sls is `k_2sls'"
-	// rather than calculating p-value, we calculate rejection is test stat>critical value
-		local k_2sls_r = cond(`k_2sls'>`invchi2_k_df'	,1,0)	
-		return scalar k_2sls_r		=`k_2sls_r'
 	}
 
 * CLR p-value
@@ -7692,6 +7678,7 @@ timer on 2
 	// rather than calculating p-value, we calculate rejection is test stat>critical value
 		local lc_2sls_r = cond(`lc_2sls'>`lc_crit'	,1,0)	
 		return scalar lc_2sls_r		=`lc_2sls_r'
+		return scalar k_2sls_r = 1
 	}
 	if strpos("`gridcols'", "lc_2slsp") {
 	// also calculate rejection indicator for projection test for each component - save into a vector
@@ -7700,6 +7687,7 @@ timer on 2
 		forvalues i = 1/`nwendog' {
 			local lc_2slsp`i'_r= cond(`lc_2slsp'[1,`i']>`lc_crit_p'	,1,0)
 			return scalar lc_2slsp`i'_r= `lc_2slsp`i'_r'
+			return scalar k_2slsp`i'_r= 1
 		}	
 	}
 
@@ -7716,22 +7704,6 @@ timer on 2
 		forvalues i = 1/`nwendog' {
 			local lc_gmmp`i'_r= cond(`lc_gmmp'[1,`i']>`lc_crit_p'	,1,0)
 			return scalar lc_gmmp`i'_r= `lc_gmmp`i'_r'
-		}	
-	}
-* K with efficient weight matrix projection test
-	if regexm("`gridcols'", "k_p[0-9]_r") {
-		local nwendog = `nendog' - `nsendog'
-		forvalues i = 1/`nwendog' {
-			local k_p`i'_r= cond(`k_chi2p'[1,`i']>`invchi2_1_df'	,1,0)
-			return scalar k_p`i'_r= `k_p`i'_r'
-		}	
-	}
-* K with 2sls weight matrix projection test
-	if regexm("`gridcols'", "k_2slsp[0-9]_r") {
-		local nwendog = `nendog' - `nsendog'
-		forvalues i = 1/`nwendog' {
-			local k_2slsp`i'_r= cond(`k_2slsp'[1,`i']>`invchi2_1_df'	,1,0)
-			return scalar k_2slsp`i'_r= `k_2slsp`i'_r'
 		}	
 	}
 
