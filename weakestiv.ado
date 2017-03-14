@@ -6159,34 +6159,31 @@ program define construct_pcitable, rclass
 				clr_level(integer 0)	///
 				wald_level(integer 0)	///
 			]
-        // testlist does not include lc_2sls or lc_gmm because we get rejection indicator(s) from compute_pvals directly for projection test
-	if strpos("`cnames'","lc_2slsp`vnum'_r"){
-		local lc_col : list posof "lc_2slsp`vnum'_r" in cnames
-	}
-	else if strpos("`cnames'","lc_gmmp`vnum'_r"){
-		local lc_col : list posof "lc_gmmp`vnum'_r" in cnames
-	}
-	else {
-		local lc_col = 0
-	}
-	local lc_2sls "lc_2sls"
-	local lc_gmm "lc_gmm"
-	local ptestlist : list testlist - lc_2sls 
-	local ptestlist : list ptestlist- lc_gmm
+
+	local rlist "lc_2sls lc_gmm k_2sls k" // these test have rejection indicators
+	local ptestlist: list testlist - rlist // make a list of tests that have p-vals
 	foreach test of local ptestlist {
 		local testcol		: list posof "`test'_p" in cnames
 	 	local gridcols		"`gridcols' `testcol'"
 	 	local testlevels	"`testlevels' ``test'_level'"
 	}
-
+	local lc_cols "" // make a list of rejection indicator columns so we avoid them in project_test
+	foreach rejection of local rlist {
+		local testcol		: list posof "`rejection'p`vnum'_r" in cnames
+		if `testcol' > 0 {
+			local lc_cols 	"`lc_cols' `testcol'"
+		}
+	}
+	dis "ptestlist is `ptestlist'"
+	dis "lc_cols is `lc_cols' gridcols is `gridcols'"
 	tempname p											//  name to use for pointer
 	mata: `p' = &`citable'								//  pointer to Mata matrix (CI table)
 
-	mata: `pcitable' = project_test(`vnum', `lc_col', `p', `points',"`gridpoints'", "`gridcols'", "`testlevels'")
+	mata: `pcitable' = project_test(`vnum', "`lc_cols'", `p', `points',"`gridpoints'", "`gridcols'", "`testlevels'")
 
 	foreach tname of local testlist {					//  add _r to end of testname to get colname
-		local ptcnames			"`ptcnames' `tname'_r"
-	}
+		local ptcnames			"`ptcnames' `tname'_r"		// in project_test, all rejection indicators are added to the end
+	}									// assume all tests with rejection indicators are in the end
 	local ptcnames				"null`vnum' `ptcnames'"	//  and add null+number to front of list of colnames
 
 	mata: mata drop `p'									//  clean up
@@ -7461,7 +7458,7 @@ version 11.2
 mata:
 real matrix project_test(										///
 							scalar vnum,						/// has column number of weak var in question
-							scalar lc_col,			/// has column number of LC_2sls or LC_gmm rejection indicator
+							string scalar lc_cols,			/// has column numbers of LC_2sls or LC_gmm or K's rejection indicator
 							pointer p,						///
 							scalar points,						///
 							string scalar pointsvec,			///
@@ -7470,11 +7467,13 @@ real matrix project_test(										///
 							)
 {
 
+	lc_col			=strtoreal(tokens(lc_cols))
 	gridpoints		=strtoreal(tokens(pointsvec))
 	gridcols		=strtoreal(tokens(colsvec))
 	levels			=strtoreal(tokens(levelsvec))
 	rtable			= (100*(*p)[.,gridcols]) :< (100 :- levels)	//  missings => zeros (thus included in CI)
-	if (lc_col>0) {
+
+	if (lc_col[1,1]>0) {
 		rtable			= (*p)[.,vnum], rtable, (*p)[., lc_col]	//  append column 1 with grid nulls for sorting and last column LC_2slsp`vnum'_r or LC_gmmp`vnum'_r
 	}
 	else {
@@ -7482,19 +7481,17 @@ real matrix project_test(										///
 	}
 	_sort(rtable, 1)															//  ... and sort on nulls in col 1
 
-	pcitable = J(0, 1+cols(gridcols)+1, 1)					//  initialize new CI table - column 1 with grid nulls ans last one for LC_2sls
-	
+	pcitable = J(0, cols(rtable), 1)					//  initialize new CI table - column 1 with grid nulls (added from above) and the rest for rejection indicator
 	pointsi=gridpoints[1,vnum]						//  points in grid for variable vnum
 	blocksize=points/pointsi
-	
+
 
 	 for (i=1; i<=pointsi; i++) {
 		block = rtable [ ((i-1)*blocksize+1)::(i*blocksize), (2..cols(rtable)) ]
-
-		pcitablei = floor(colsum(block) * 1/blocksize)							//  * 1/blocksize means cols with all ones
-																				//  will sum=1 and other cols will sum<1.
-																				//  floor(.) converts former to 1 and latter to 0.
+		pcitablei = floor(colsum(block) * 1/blocksize)							//  * 1/blocksize means cols with all ones																	//  will sum=1 and other cols will sum<1.
+							//  floor(.) converts former to 1 and latter to 0.
 		pcitable = pcitable \ (rtable[(i*blocksize),1] , pcitablei)				//  and append with null to pcitable
+
 	}
 
 	st_matrix("r(pcitable)", pcitable)
