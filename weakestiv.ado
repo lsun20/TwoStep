@@ -2687,7 +2687,7 @@ di as err "or specify citestlist() to calculate full confidence sets."
 * Check if test lists provided by the users are legal
 	if "`citestlist'" != "" {
 		local citestlist = lower("`citestlist'")
-
+		
 		if !strpos("`citestlist'", "clr") & !strpos("`citestlist'","k") & !strpos("`citestlist'","lc_2sls")&!strpos("`citestlist'","lc_gmm") ///
 		& !strpos("`citestlist'","j") & !strpos("`citestlist'","kj") & !strpos("`citestlist'","ar")  {
 di as err "citestlist option error - can construct CI based on CLR, K, K_2sls, LC_gmm, LC_2sls, J, KJ, AR tests" 
@@ -2710,17 +2710,30 @@ di as err "citestlist option error - LC_2sls and LC_gmm need to be run separatel
 	
 	if "`ptestlist'" != "" {
 		local ptestlist = lower("`ptestlist'")
-		
-		if !strpos("`ptestlist'","lc_2sls")&!strpos("`ptestlist'","lc_gmm")&!strpos("`ptestlist'","k_2sls") {
+		local legal_ptest "lc_2sls lc_gmm k_2sls k" // legal ptestlist options
+		local legal : list ptestlist in legal_ptest
+		if `legal' == 0 {
 di as err "ptestlist option error - can construct projection CI based on K, K_2sls, LC_gmm and LC_2sls" 
 		exit 198
 		}
-		if strpos("`ptestlist'","lc_2sls") & strpos("`ptestlist'","lc_gmm") {
-di as err "ptestlist option error - LC_2sls and LC_gmm need to be run separately because ivreg2 specifications are different." 
+		local lc_concurr "lc_2sls lc_gmm"
+		local legal_lc : list lc_concurr in ptestlist
+		local k_concurr "k_2sls k_gmm"
+		local legal_k : list k_concurr in ptestlist
+		if `legal_lc' > 0 | `legal_k' > 0 {
+di as err "ptestlist option error - tests with 2sls and efficient weight matrix need to be run separately." 
 		// LC_2sls needs ivreg2, robust while LC_gmm needs ivreg2, robust gmm2s
 		exit 198
 		}
-		
+		local lc_k_concurr "lc_2sls k"
+		local k_lc_concurr "k_2sls lc_gmm"
+		local legal_k_lc : list k_lc_concurr in ptestlist
+		local legal_lc_k : list lc_k_concurr in ptestlist
+		if `legal_lc_k' > 0 | `legal_k_lc' > 0 {
+di as err "ptestlist option error - only allow LC and K tests with same weight matrix to be calculated together." 
+		// LC_2sls needs ivreg2, robust while LC_gmm needs ivreg2, robust gmm2s
+		exit 198
+		}		
 	}
 
 * Default test lists and CI methods
@@ -2758,6 +2771,7 @@ di as err "to calculate confidence set, you do not need to specify project()."
 di as err "project option error - there are more than one weak endogenous variables."
 di as err "either specify project() to calculate marginal confidence sets (recommended)," 
 di as err "or specify citestlist() to calculate full confidence sets." 
+
 		exit 198		
 			}
 		}
@@ -2767,33 +2781,27 @@ di as err "or specify citestlist() to calculate full confidence sets."
 			* we do not neet point wald test statistics, only for LC_2sls, even though, we don't need to save it in gridcols
 			* construct a full list of stats that will be stored in citable - drop them if not specified in citestlist
 			* add the rejection indicator for LC_2sls projection tests, and the a_minp (for distortion cutoff)
-			if `nwendog' > 1 & strpos("`ptestlist'", "lc_2sls"){
+			foreach test of local legal_ptest { // loop over all possible ptest
+				local `test'_in_ptest: list posof "`test'" in ptestlist // generate indicator for each test
+				if ``test'_in_ptest' > 0 {
+					forvalues i = 1/`nwendog' {
+						local gridcols "`gridcols' `test'p`i'_r"
+					}
+				}
+			}
+			if `lc_2sls_in_ptest' > 0 | `lc_gmm_in_ptest' > 0 {
 				forvalues i = 1/`nwendog' {
-					local gridcols "`gridcols' lc_2slsp`i'_r"
 					local gridcols "`gridcols' a_diffp`i'"
 				}
 			}
-			if `nwendog' > 1 & strpos("`ptestlist'", "lc_gmm"){
-				forvalues i = 1/`nwendog' {
-					local gridcols "`gridcols' lc_gmmp`i'_r"
-					local gridcols "`gridcols' a_diffp`i'"
-				}
-			}
-			if `nwendog' > 1 & strpos("`ptestlist'", "k_2sls"){
-				forvalues i = 1/`nwendog' {
-					local gridcols "`gridcols' k_2slsp`i'_r"
-				}
-			}
-			if `nwendog' > 1 & (strpos("`ptestlist'", " k ")){ // efficient K test !!! need a proper name
-				forvalues i = 1/`nwendog' {
-					local gridcols "`gridcols' k_p`i'_r"
-				}
-			}
+			// edit citestlist
 			if !strpos("`citestlist'", "ar") {
 				local gridcols =subinstr("`gridcols'", "ar_chi2", "", .)
 				local gridcols =subinstr("`gridcols'", "ar_p", "", .)
 			}
-			if !strpos("`citestlist'", "k ") | !strpos("`citestlist'", " k"){ // to avoid confusion with k_2sls
+			local k_in_citest: list posof "k" in citestlist
+			dis "is k in citestlist `k_in_citest'"
+			if `k_in_citest' == 0 { // k is not on the citestlist
 				local gridcols =subinstr("`gridcols'", "kj_p", "", .)
 				local gridcols =subinstr("`gridcols'", "k_chi2", "", .)
 				local gridcols =subinstr("`gridcols'", " k_p ", " ", .) // so that rk_p is not cut off and k_p1_r
@@ -6015,12 +6023,27 @@ timer off 10
 				mat `lc_2slsp'		=r(lc_2slsp)
 				local ar_chi2		=r(ar_chi2) // need k_2sls and ar_chi2 to calculate a_min	
 			}
+			
 			if `nwendog' > 1 & strpos("`gridcols'", "lc_gmmp") {	
 				tempname k_chi2p lc_gmmp
 				mat `k_chi2p'		=r(k_chi2p)
 				mat `lc_gmmp'		=r(lc_gmmp)
+				*matlist `lc_gmmp'
 				local ar_chi2		=r(ar_chi2) // need k_chi2 and ar_chi2 to calculate a_min	
 			}
+			if `nwendog' > 1 & strpos("`gridcols'", "k_2slsp") {	
+				tempname k_2slsp 
+				mat `k_2slsp'		=r(k_2slsp)
+				*dis "matrix k_2slsp is"
+				*matlist `k_2slsp'
+			}
+			if `nwendog' > 1 & regexm("`gridcols'", "kp[0-9]_r") {	
+				tempname kp 
+				mat `kp'		=r(k_chi2p)
+				*dis "matrix kp is"
+				*matlist `kp'
+			}
+
 dis "gridcols is `gridcols'"
 * calculate test statistics, p-values, and rejection indicators from above matrices
 			compute_pvals,					///
@@ -6048,6 +6071,8 @@ dis "gridcols is `gridcols'"
 				wald_chi2(`wald_chi2')		///
 				lc_2slsp(`lc_2slsp')			///
 				lc_gmmp(`lc_gmmp')			///
+				k_2slsp(`k_2slsp')			///
+				kp(`kp')				///
 				rk(`rk')					///
 				kwt(`kwt')
 
@@ -6099,6 +6124,7 @@ dis "gridcols is `gridcols'"
 			if `nwendog' > 1 & strpos("`gridcols'", "lc_gmmp") {
 
 				forvalues i=1/`nwendog' {
+					local kp`i'_r = r(kp`i'_r)
 					local lc_gmmp`i'_r = r(lc_gmmp`i'_r)
 					// and record a_diff for each projection test - need to return k_chi2p and calculate invchi2_1_df
 					local a_diffp`i'= (`invchi2_1_df'-`k_chi2p'[1,`i'])/`ar_chi2'*cond(`wald_chi2p'[1,`i']>`invchi2_1_df',1,0)
@@ -6363,7 +6389,7 @@ program get_ci_from_table, rclass
 			local lc_cols		"`lc_cols' `testcol'"
 			}
 		}
-		dis "rtestlist `rtestlist'"
+		dis "rtestlist `rtestlist' testlist is 	`testlist'"
 		dis "lc_cols is `lc_cols' gridcols is `gridcols'"
 		
 		mata: `rtable' = collapse_citable(`p', "`lc_cols'", "`gridcols'", "`testlevels'")	//  create table of rejections and collapse
@@ -7591,6 +7617,8 @@ program compute_pvals, rclass
 				wald_chi2(real 0)		///
 				lc_2slsp(name local)		/// row vector of lc_2sls test statistics for projection tests
 				lc_gmmp(name local)		/// 
+				k_2slsp(name local)		///
+				kp(name local)			///
 				rk(real 0)				///
 				 *]
 		 
@@ -7684,7 +7712,8 @@ timer on 2
 		forvalues i = 1/`nwendog' {
 			local lc_2slsp`i'_r= cond(`lc_2slsp'[1,`i']>`lc_crit_p'	,1,0)
 			return scalar lc_2slsp`i'_r= `lc_2slsp`i'_r'
-			return scalar k_2slsp`i'_r= 1
+			local k_2slsp`i'_r= cond(`k_2slsp'[1,`i']>`invchi2_1_df'    ,1,0)
+			return scalar k_2slsp`i'_r= `k_2slsp`i'_r'
 		}	
 	}
 
@@ -7701,6 +7730,8 @@ timer on 2
 		forvalues i = 1/`nwendog' {
 			local lc_gmmp`i'_r= cond(`lc_gmmp'[1,`i']>`lc_crit_p'	,1,0)
 			return scalar lc_gmmp`i'_r= `lc_gmmp`i'_r'
+			local kp`i'_r= cond(`kp'[1,`i']>`invchi2_1_df'    ,1,0)
+			return scalar kp`i'_r= `kp`i'_r'
 		}	
 	}
 
