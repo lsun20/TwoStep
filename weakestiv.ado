@@ -2711,6 +2711,7 @@ di as err "citestlist option error - LC_2sls and LC_gmm need to be run separatel
 	if "`ptestlist'" != "" {
 		local ptestlist = lower("`ptestlist'")
 		local legal_ptest "lc_2sls lc_gmm k_2sls k" // legal ptestlist options
+		dis "`ptestlist' `legal_ptest'"
 		local legal : list ptestlist in legal_ptest
 		if `legal' == 0 {
 di as err "ptestlist option error - can construct projection CI based on K, K_2sls, LC_gmm and LC_2sls" 
@@ -2781,17 +2782,16 @@ di as err "or specify citestlist() to calculate full confidence sets."
 			* we do not neet point wald test statistics, only for LC_2sls, even though, we don't need to save it in gridcols
 			* construct a full list of stats that will be stored in citable - drop them if not specified in citestlist
 			* add the rejection indicator for LC_2sls projection tests, and the a_minp (for distortion cutoff)
-			foreach test of local legal_ptest { // loop over all possible ptest
-				local `test'_in_ptest: list posof "`test'" in ptestlist // generate indicator for each test
-				if ``test'_in_ptest' > 0 {
+			if "`ptestlist'" != "" {
+				foreach test of local ptestlist { // loop over all potest (which have been verified legal
 					forvalues i = 1/`nwendog' {
 						local gridcols "`gridcols' `test'p`i'_r"
 					}
 				}
-			}
-			if `lc_2sls_in_ptest' > 0 | `lc_gmm_in_ptest' > 0 {
-				forvalues i = 1/`nwendog' {
-					local gridcols "`gridcols' a_diffp`i'"
+				if strpos("`ptestlist'", "lc") { // indicator for either is on ptestlist
+					forvalues i = 1/`nwendog' {
+						local gridcols "`gridcols' a_diffp`i'"
+					}
 				}
 			}
 			// edit citestlist
@@ -2800,7 +2800,6 @@ di as err "or specify citestlist() to calculate full confidence sets."
 				local gridcols =subinstr("`gridcols'", "ar_p", "", .)
 			}
 			local k_in_citest: list posof "k" in citestlist
-			dis "is k in citestlist `k_in_citest'"
 			if `k_in_citest' == 0 { // k is not on the citestlist
 				local gridcols =subinstr("`gridcols'", "kj_p", "", .)
 				local gridcols =subinstr("`gridcols'", "k_chi2", "", .)
@@ -6064,6 +6063,7 @@ dis "gridcols is `gridcols'"
 				lc_crit_p(`lc_crit_p')	///
 				ar_chi2(`ar_chi2')			///
 				k_chi2(`k_chi2')			///
+				k_2sls(`k_2sls')			///
 				lc_2sls(`lc_2sls')			///
 				lc_gmm(`lc_gmm')			///
 				j_chi2(`j_chi2')			///
@@ -6748,7 +6748,7 @@ timer_on(1)
 			meat			= dwd *aux4 * dwd
 		}
 
-		if (strpos(gridcols, "lc_2sls_r")) {
+		if (strpos(gridcols, "lc_2sls_r")|strpos(gridcols, "k_2sls_r")) {
 // See documentation on what meat and bread are
 			aux7 = cholsolve(meat,bread)
 			if (aux7[1,1]==.) {
@@ -6763,7 +6763,7 @@ timer_on(1)
 			st_numscalar("r(lc_2sls)",lc_2sls[1,1])
 		}
 
-		if (strpos(gridcols, "lc_2slsp")) {
+		if (strpos(gridcols, "lc_2slsp")| strpos(gridcols, "k_2slsp")) {
 			// Calculate projection test statistic
 			// endog first weak, then strong endog
 			nwendog			=rows(wnullvector) // wnullvector is column vector of weakly-identified endog null
@@ -6783,7 +6783,7 @@ timer_on(1)
 			st_numscalar("r(k_chi2)", k_chi2[1,1])
 			st_numscalar("r(lc_gmm)",lc_gmm[1,1])
 		}
-		if (strpos(gridcols, "lc_gmmp")) {
+		if (strpos(gridcols, "lc_gmmp")|strpos(gridcols, "kp")) {
 			// Calculate projection test statistic
 			dwd			=invsym(pi_beta'*aux5)
 			bread 			=r'*aux5 *dwd
@@ -7609,6 +7609,7 @@ program compute_pvals, rclass
 				lc_crit_p(real 0)          /// critical value of the linear combination distribution
 				ar_chi2(real 0)			///
 				k_chi2(real 0)			///
+				k_2sls(real 0)			///
 				lc_2sls(real 0)			///
 				lc_gmm(real 0)			///
 				j_chi2(real 0)			///
@@ -7703,7 +7704,8 @@ timer on 2
 	// rather than calculating p-value, we calculate rejection is test stat>critical value
 		local lc_2sls_r = cond(`lc_2sls'>`lc_crit'	,1,0)	
 		return scalar lc_2sls_r		=`lc_2sls_r'
-		return scalar k_2sls_r = 1
+		local k_2sls_r = cond(`k_2sls'>`invchi2_k_df'    ,1,0)    
+		return scalar k_2sls_r = `k_2sls_r'
 	}
 	if strpos("`gridcols'", "lc_2slsp") {
 	// also calculate rejection indicator for projection test for each component - save into a vector
