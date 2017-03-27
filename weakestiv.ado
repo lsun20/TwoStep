@@ -660,8 +660,10 @@ di as err "Fixed-effects estimation requires data to be -xtset-"
 		
 				tempvar cuewvar ehat
 				qui gen double `ehat' = . if `touse'
-				local avarcmd	"avar (`ehat') (`exexog_t') if `touse' `wtexp', `vceopt' nocons"
-		
+				//local avarcmd	"avar (`ehat') (`exexog_t') if `touse' `wtexp', `vceopt' nocons"
+				local avarcmd	"avar (`depvar_t' `endo_t') (`exexog_t') if `touse' `wtexp', `vceopt' nocons"
+
+		display "need to change avar if s_cue_beta works for cuepoint!"
 				qui gen double `cuewvar' = `wf'*`wvar' if `touse'
 		
 				di as text "Obtaining CUE point estimates..."
@@ -741,12 +743,14 @@ di as err "error: number of weakly endogenous (`nwendog') doesn't match number o
 		else if `cuestrong' {
 			local s1method	"iv"
 			local s2method	"cue"
+			display "cue used"
 		}
 		else {
 			local s1method	"iv"
 			local s2method	"gmm2s"
+			display "gmm2s used"
 		}
-
+display "`s1method' `s2method'"
 * Always need to use an iid method (LIML or IV), either for final strong beta or for initial value for non-iid strong beta
 		get_strong_beta,							///
 							`s1method'				/// either LIML or IV
@@ -6277,7 +6281,8 @@ real matrix collapse_citable(									///
 	lc_col			=strtoreal(tokens(lc_cols))
 	gridcols		=strtoreal(tokens(colsvec))
 	levels			=strtoreal(tokens(levelsvec))
-printf("lc_col is %9.0g",lc_col[1,1]) // need to think abou tcases 
+printf("lc_col is %9.0g",lc_col[1,1]) // 0 is the case that only AR test is listed - eventually do AR with rejection, too?
+
 	rtable			= (100*(*p)[.,gridcols]) :< (100 :- levels)
 	if (lc_col[1,1]>0) {
 		rtable			= (*p)[.,1], rtable, (*p)[., lc_col]
@@ -6388,6 +6393,9 @@ program get_ci_from_table, rclass
 		 	if `testcol' >0 { // if the test is in cnames, then append it
 			local lc_cols		"`lc_cols' `testcol'"
 			}
+		}
+		if "`lc_cols'" == "" { // if none of the rejection test is on the list (i.e. only AR test), then set to 0
+			local lc_cols 		"0"
 		}
 		dis "rtestlist `rtestlist' testlist is 	`testlist'"
 		dis "lc_cols is `lc_cols' gridcols is `gridcols'"
@@ -6678,11 +6686,13 @@ timer_on(1)
 		}
 		if (strpos(gridcols, "lc_gmm")|strpos(gridcols, " k_p")|strpos(gridcols, "j_p")|strpos(gridcols, "clr_stat")){
 			aux5 = cholsolve(psi,pi_beta)
+
 			if (aux5[1,1]==.) {
 				npd = 1
 				aux5 = qrsolve(psi,pi_beta)
 			}
 			aux6 = cholsolve(pi_beta'*aux5,pi_beta')
+
 			if (aux6[1,1]==.) {
 				npd = 1
 				aux6 = qrsolve(pi_beta'*aux5,pi_beta')
@@ -6749,12 +6759,17 @@ timer_on(1)
 		}
 
 		if (strpos(gridcols, "lc_2sls_r")|strpos(gridcols, "k_2sls_r")) {
+printf("dimension of meat %9.0g %9.0g",rows(meat),cols(meat))
+printf("dimension of bread %9.0g %9.0g",rows(bread),cols(bread))
+
 // See documentation on what meat and bread are
-			aux7 = cholsolve(meat,bread)
+			aux7 = cholsolve(meat,bread')
 			if (aux7[1,1]==.) {
 				npd = 1
-				aux7 = qrsolve(meat,bread)
+				aux7 = qrsolve(meat,bread')
 			}
+														printf("here")
+
 			// Store k_2sls (K stat with 2sls in place of efficient weight matrix
 			k_2sls			= bread * aux7
 			// Calculate the linear combination test statistic
@@ -6929,7 +6944,9 @@ program get_strong_beta, rclass
 	if "`gmm2s'"~="" {														//  2-step GMM estimation
 																			//  note 1st-step sbeta is provided
 
-		cap avar (`ehat') (`exexog') if `touse' `wtexp', `vceopt' nocons	//  get weighting matrix for efficient GMM
+		//cap avar (`ehat') (`exexog') if `touse' `wtexp', `vceopt' nocons	//  get weighting matrix for efficient GMM
+		//avar (`y0' `sendo') (`exexog') if `touse' `wtexp', `vceopt' nocons
+
 		if _rc>0 {
 di as err "error - internal call to avar failed"
 			exit _rc
@@ -6956,8 +6973,8 @@ di as err "error - internal call to avar failed"
 	if "`cue'"~="" {														//  CUE estimation
 																			//  note 1st-step sbeta is provided
 
-		local avarcmd	"avar (`ehat') (`exexog') if `touse' `wtexp', `vceopt' nocons"
-
+		//local avarcmd	"avar (`ehat') (`exexog') if `touse' `wtexp', `vceopt' nocons"
+		local avarcmd	"avar (`y0' `sendo') (`exexog') if `touse' `wtexp', `vceopt' nocons"
 		tempvar cuewvar
 		qui gen double `cuewvar' = `wf'*`wvar' if `touse'
 
@@ -7306,17 +7323,24 @@ mata:
 void m_cuecrit(todo, beta, struct ms_cuestruct scalar cuestruct, j, g, H)
 {
 
-	(*cuestruct.e)[.,.] = *cuestruct.y - *cuestruct.X * beta'	//  calc residuals given beta
-																//  so that Stata variable (view) is changed
-
-	Ze = quadcross(*cuestruct.Z, *cuestruct.cuewvar, *cuestruct.e)
-	gbar = 1/cuestruct.N * Ze									//  mean of moments, 1/N * Z'e
+	//(*cuestruct.e)[.,.] = *cuestruct.y - *cuestruct.X * beta'	//  calc residuals given beta															//  so that Stata variable (view) is changed
+	//Ze = quadcross(*cuestruct.Z, *cuestruct.cuewvar, *cuestruct.e)
+	//gbar = 1/cuestruct.N * Ze									//  mean of moments, 1/N * Z'e
 	
-	if (!cuestruct.LM) {										//  MD/Wald so must partial Z out of e
-		pihat = cholsolve(cuestruct.ZZ, Ze)
-		(*cuestruct.e)[.,.] = *cuestruct.e - *cuestruct.Z * pihat
-	}
+	//if (!cuestruct.LM) {										//  MD/Wald so must partial Z out of e
+	//	pihat = cholsolve(cuestruct.ZZ, Ze)
+	//	(*cuestruct.e)[.,.] = *cuestruct.e - *cuestruct.Z * pihat
+	//}
+	// * right infornt of a name is a pointer
+	ZY = quadcross(*cuestruct.Z, *cuestruct.cuewvar, *cuestruct.y)
+	ZX = quadcross(*cuestruct.Z, *cuestruct.cuewvar, *cuestruct.X)
+	aux0 = ZY-ZX * beta'
+	rhat = cholsolve(cuestruct.ZZ, aux0)
 
+	N=cuestruct.N
+	nexexog=rows(ZY)
+	nendog=cols(ZX)
+	//printf("nendog is %9.0g and nexexog is %9.0g and N is %9.0g",nendog,nexexog,N)
 	_rc = _stata(cuestruct.avarcmd,1)							//  call avar (Stata program) to get S matrix using new resids
 	if (_rc > 0) {												//  no output, get return code
 errprintf("\nError: internal call to -avar- for CUE failed\n")
@@ -7325,14 +7349,33 @@ errprintf("\nError: internal call to -avar- for CUE failed\n")
 
 	omega = st_matrix("r(S)")
 
-	aux1 = cholsolve(omega, gbar)
+	S=st_matrix("r(S)")
+	//printf("S dimension is %9.0g %9.0g",rows(S), cols(S))
+	S11=S[| 1,1 \ nexexog,nexexog |]
+	S12=S[| nexexog+1,1 \ rows(S),nexexog |]
+	S22=S[| nexexog+1, nexexog+1 \ rows(S),cols(S) |]
+	
+	zzinv=invsym(cuestruct.ZZ)
 
+	var_del = N * makesymmetric(zzinv*S11*zzinv) 
+	var_del=var_del[| 1,1 \ nexexog,nexexog |]
+// Kronecker structure
+	var_pi_z = N * makesymmetric(I(nendog)#zzinv * S22 * I(nendog)#zzinv) 
+	var_pidel_z = N * I(nendog)#zzinv*S12*zzinv 
+	
+	kron		= (beta'#I(nexexog))
+	psi		= var_del - kron' * var_pidel_z - (kron' * var_pidel_z)' + kron' * var_pi_z* kron
+	_makesymmetric(psi)
+
+	//aux1 = cholsolve(omega, gbar)
+	aux1 = cholsolve(psi,rhat)
 	if (aux1[1,1]==.) {
-		aux1 = qrsolve(omega, gbar)
+	//	aux1 = qrsolve(omega, gbar)
+		aux1 = qrsolve(psi,rhat)
 		st_numscalar("r(npd)",1)
 	}
-
-	j = cuestruct.N * gbar' * aux1
+	j = cuestruct.N * rhat' * aux1
+	//j = cuestruct.N * gbar' * aux1
 
 } // end program CUE criterion function
 end
@@ -7700,14 +7743,14 @@ timer on 2
 	}
 	
 * linear combination with 2sls weight matrix.
-	if strpos("`gridcols'", "lc_2sls_r") {	
+	if (strpos("`gridcols'", "lc_2sls_r")|strpos("`gridcols'", "k_2sls_r")) {	
 	// rather than calculating p-value, we calculate rejection is test stat>critical value
 		local lc_2sls_r = cond(`lc_2sls'>`lc_crit'	,1,0)	
 		return scalar lc_2sls_r		=`lc_2sls_r'
 		local k_2sls_r = cond(`k_2sls'>`invchi2_k_df'    ,1,0)    
 		return scalar k_2sls_r = `k_2sls_r'
 	}
-	if strpos("`gridcols'", "lc_2slsp") {
+	if (strpos("`gridcols'", "lc_2slsp")|strpos("`gridcols'", "k_2slsp")) {
 	// also calculate rejection indicator for projection test for each component - save into a vector
 	// loop over the row vector of projection test statistis - faster than reading matrix into mata
 		local nwendog = `nendog' - `nsendog'
@@ -7725,7 +7768,7 @@ timer on 2
 		local lc_gmm_r = cond(`lc_gmm'>`lc_crit'	,1,0)	
 		return scalar lc_gmm_r		=`lc_gmm_r'
 	}
-	if strpos("`gridcols'", "lc_gmmp") {
+	if (strpos("`gridcols'", "lc_gmmp")|strpos("`gridcols'", "kp")) {
 	// also calculate rejection indicator for projection test for each component - save into a vector
 	// loop over the row vector of projection test statistis - faster than reading matrix into mata
 		local nwendog = `nendog' - `nsendog'
