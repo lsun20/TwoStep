@@ -289,7 +289,7 @@ di as err "Internal weakiv error - preserve failed"
 	local note2			"`s(note2)'"
 	local note3			"`s(note3)'"
 	local iid			"`s(iid)'"
-
+display "waldcmd is `waldcmd'"
 ************************* Prep for transformations **************************************
 
 * If TS or FV operators used, replace with temporary variables.
@@ -658,28 +658,84 @@ di as err "Fixed-effects estimation requires data to be -xtset-"
 			}
 			else {
 		
-				tempvar cuewvar ehat
-				qui gen double `ehat' = . if `touse'
+				//tempvar cuewvar ehat
+				//qui gen double `ehat' = . if `touse'
 				//local avarcmd	"avar (`ehat') (`exexog_t') if `touse' `wtexp', `vceopt' nocons"
-				local avarcmd	"avar (`depvar_t' `endo_t') (`exexog_t') if `touse' `wtexp', `vceopt' nocons"
+				//local avarcmd	"avar (`depvar_t' `endo_t') (`exexog_t') if `touse' `wtexp', `vceopt' nocons"
 
 		display "need to change avar if s_cue_beta works for cuepoint!"
-				qui gen double `cuewvar' = `wf'*`wvar' if `touse'
+				//qui gen double `cuewvar' = `wf'*`wvar' if `touse'
+				tempname pi_z bhat uhat zz zzinv del_z var_pi_z var_del var_pidel_z
+				tempname S S11 S12 S22
+
+				qui reg `depvar_t' `exexog_t' if `touse' `wtexp', nocons
+				local nexexog : word count `exexog_t'
+				local nendog : word count `endo_t'
+				display "N is `N' nexexog is `nexexog'"
+
+				mat `bhat'=e(b)
+				mat `del_z'=`bhat'[1...,1..`nexexog']						//  row vector
+				qui predict double `uhat' if `touse', resid
+
+				* RF estimations
+				* Accumulate pi_z matrix and list of RF residuals Vhat
+				mata: `pi_z' = J(`nexexog',0,.)
+				foreach var of varlist `endo_t' {
+					tempvar vhat_`var'
+					qui reg `var' `exexog_t' if `touse' `wtexp', nocons
+					qui predict double `vhat_`var'' if `touse', resid
+					local Vhat "`Vhat' `vhat_`var''"
+					mata: `bhat' = st_matrix("e(b)")
+					mata: `bhat' = `bhat'[| 1,1 \ .,`nexexog' |]
+					mata: `bhat' = `bhat''
+					mata: `pi_z' = `pi_z' , `bhat'
+				}
 		
+				cap avar (`uhat' `Vhat') (`exexog_t') if `touse' `wtexp', `vceopt' nocons 
+		
+				if _rc>0 {
+					di as err "error - internal call to avar failed"
+					exit _rc
+				}
+		
+				mata: `S'=st_matrix("r(S)")
+				mata: `S11'=`S'[| 1,1 \ `nexexog',`nexexog' |]
+				mata: `S12'=`S'[| `nexexog'+1,1 \ rows(`S'),`nexexog' |]
+				mata: `S22'=`S'[| `nexexog'+1, `nexexog'+1 \ rows(`S'),cols(`S') |]
+
+				qui mat accum `zz' = `exexog_t' if `touse' `wtexp', nocons
+				mata: `zz'=st_matrix("`zz'")
+				mata: `zzinv'=invsym(`zz')
+				tempname aux1 aux2
+				mata: `var_del' = `N' * makesymmetric(`zzinv'*`S11'*`zzinv') 
+				mata: `var_del'=`var_del'[| 1,1 \ `nexexog',`nexexog' |]
+				// Kronecker structure
+				mata: `var_pi_z' = `N' * makesymmetric(I(`nendog')#`zzinv'*`S22'*I(`nendog')#`zzinv') 
+				mata: `var_pidel_z' = `N' * I(`nendog')#`zzinv'*`S12'*`zzinv' 
+				mata: st_matrix("r(`pi_z')",`pi_z')
+				mata: st_matrix("r(`var_del')",`var_del')
+				mata: st_matrix("r(`var_pi_z')",`var_pi_z')
+				mata: st_matrix("r(`var_pidel_z')",`var_pidel_z')
+				mat `pi_z'=r(`pi_z')
+				mat `var_del'=r(`var_del')
+				mat `var_pi_z'=r(`var_pi_z')
+				mat `var_pidel_z'=r(`var_pidel_z')
+
+				mata: mata drop `zz' `zzinv' `S' `S11' `S12' `S22' `bhat'			// clean up Mata memory
+				mata: mata drop `var_del' `var_pi_z'
+				mata: mata drop `pi_z' `var_pidel_z'
 				di as text "Obtaining CUE point estimates..."
 				mata: s_cue_beta(							///
-										`N',				///
-										"`depvar_t'",		///
-										"`endo_t'",			///
-										"`exexog_t'",		///
-										"`ehat'",			///
-										"`touse'",			///
-										"`ebeta'",			/// use all Wald endog for starting values
-										"`cuewvar'",		///
-										"`zz'",				///
-										"`avarcmd'",		///
-										`lm',				///
-										"on"				/// show CUE trace log
+									`N',				///
+									`nexexog',			/// number of instruments
+									"`del_z'",		/// row vector
+									"`var_del'",		///
+									"`pi_z'",		///
+									"`var_pi_z'",		///
+									"`var_pidel_z'",		///
+									"`touse'",			///
+									"`ebeta'",			/// use all Wald endog for starting values
+									"on"				/// show CUE trace log
 								)
 			}
 	
@@ -6926,40 +6982,91 @@ program get_strong_beta, rclass
 
 	if "`gmm2s'`cue'"~="" {
 
-		qui gen double `y0' = `depvar' if `touse'							//  calc y0 = y at hypoth null; also used by CUE
+		qui gen double `y0' = `depvar' if `touse'			//  calc y0 = y at hypoth null; also used by CUE
 		local i=1
 		foreach var of varlist `wendo' {
 			qui replace `y0' = `y0' - `b0'[1,`i']*`var'
 			local ++i
 		}
-		qui gen double `ehat' = `y0' if `touse'								//  calc 1st-step residuals at hypoth null
-		local i=1															//  using inefficient IV estimator in sbeta
+		
+		tempname pi_z bhat uhat zz zzinv del_z var_pi_z var_del var_pidel_z
+		tempname S S11 S12 S22
+		local N = `nobs'
+
+		qui reg `y0' `exexog' if `touse' `wtexp', nocons
+		local nexexog : word count `exexog'
+		local nendog : word count `sendo'
+		display "N is `N' nexexog is `nexexog'"
+
+		mat `bhat'=e(b)
+		mat `del_z'=`bhat'[1...,1..`nexexog']						//  row vector
+		qui predict double `uhat' if `touse', resid
+
+		* RF estimations
+		* Accumulate pi_z matrix and list of RF residuals Vhat
+		mata: `pi_z' = J(`nexexog',0,.)
 		foreach var of varlist `sendo' {
-			qui replace `ehat' = `ehat' - `sbeta'[1,`i']*`var'
-			local ++i
+			tempvar vhat_`var'
+			qui reg `var' `exexog' if `touse' `wtexp', nocons
+			qui predict double `vhat_`var'' if `touse', resid
+			local Vhat "`Vhat' `vhat_`var''"
+			mata: `bhat' = st_matrix("e(b)")
+			mata: `bhat' = `bhat'[| 1,1 \ .,`nexexog' |]
+			mata: `bhat' = `bhat''
+			mata: `pi_z' = `pi_z' , `bhat'
 		}
+		
+		cap avar (`uhat' `Vhat') (`exexog') if `touse' `wtexp', `vceopt' nocons 
+		// note that avar(\sqrt{N}(\hat{\delta}-\hat{\pi}*\beta)) is the same as
+		// Z'Z^-1*Cov(Z'U-Z'V*\beta) and Cov(z*u-z*v'*\beta) is a linear combination 
+		// Var(zu) and Var(zv') and Cov(zu,\vec{zv'}) 
+		// where Var(zv') and \vec{zv'} are the Kronecker product
+		if _rc>0 {
+			di as err "error - internal call to avar failed"
+			exit _rc
+		}
+		
+		mata: `S'=st_matrix("r(S)")
+		mata: `S11'=`S'[| 1,1 \ `nexexog',`nexexog' |]
+		mata: `S12'=`S'[| `nexexog'+1,1 \ rows(`S'),`nexexog' |]
+		mata: `S22'=`S'[| `nexexog'+1, `nexexog'+1 \ rows(`S'),cols(`S') |]
+
+		qui mat accum `zz' = `exexog' if `touse' `wtexp', nocons
+		mata: `zz'=st_matrix("`zz'")
+		mata: `zzinv'=invsym(`zz')
+		tempname aux1 aux2
+		mata: `var_del' = `N' * makesymmetric(`zzinv'*`S11'*`zzinv') 
+		mata: `var_del'=`var_del'[| 1,1 \ `nexexog',`nexexog' |]
+		// Kronecker structure
+		mata: `var_pi_z' = `N' * makesymmetric(I(`nendog')#`zzinv'*`S22'*I(`nendog')#`zzinv') 
+		mata: `var_pidel_z' = `N' * I(`nendog')#`zzinv'*`S12'*`zzinv' 
+		mata: st_matrix("r(`pi_z')",`pi_z')
+		mata: st_matrix("r(`var_del')",`var_del')
+		mata: st_matrix("r(`var_pi_z')",`var_pi_z')
+		mata: st_matrix("r(`var_pidel_z')",`var_pidel_z')
+		mata: st_matrix("r(`zzinv')",`zzinv')
+		mat `zzinv' = r(`zzinv')
+		mat `pi_z'=r(`pi_z')
+		mat `var_del'=r(`var_del')
+		mat `var_pi_z'=r(`var_pi_z')
+		mat `var_pidel_z'=r(`var_pidel_z')
+
+		mata: mata drop `zz' `zzinv' `S' `S11' `S12' `S22' `bhat'			// clean up Mata memory
+		mata: mata drop `var_del' `var_pi_z'
+		mata: mata drop `pi_z' `var_pidel_z'
 
 	}
 		
 	if "`gmm2s'"~="" {														//  2-step GMM estimation
-																			//  note 1st-step sbeta is provided
-
-		//cap avar (`ehat') (`exexog') if `touse' `wtexp', `vceopt' nocons	//  get weighting matrix for efficient GMM
-		//avar (`y0' `sendo') (`exexog') if `touse' `wtexp', `vceopt' nocons
-
-		if _rc>0 {
-di as err "error - internal call to avar failed"
-			exit _rc
-		}
-		mat `S' = r(S)
-
+	// 2-step MD estimation
 		mata: s_gmm2s_beta(							///
-								`nobs',				///
-								"`zx1'",			///
-								"`zx2'",			///
-								"`zy'",				///
-								"`b0'",				/// rowvector
-								"`S'"				///
+								`nexexog',		/// number of instruments
+								"`sbeta'",		/// initial inefficient 1st-step sbeta is provided
+								"`del_z'",		/// row vector
+								"`var_del'",		///
+								"`pi_z'",		///
+								"`var_pi_z'",		///
+								"`var_pidel_z'"		///
 						)
 		mat `sbeta'			= r(beta)
 		mat `sbeta'			= `sbeta''										//  row vector (Stata convention)
@@ -6980,17 +7087,15 @@ di as err "error - internal call to avar failed"
 
 		mata: s_cue_beta(							///
 								`nobs',				///
-								"`y0'",				///
-								"`sendo'",			///
-								"`exexog'",			///
-								"`ehat'",			///
+								`nexexog',		/// number of instruments
+								"`del_z'",		/// row vector
+								"`var_del'",		///
+								"`pi_z'",		///
+								"`var_pi_z'",		///
+								"`var_pidel_z'",		///
 								"`touse'",			///
 								"`sbeta'",			/// 1st-step sbeta is provided to get_strong_beta
-								"`cuewvar'",		///
-								"`zz'",				///
-								"`avarcmd'",		///
-								`lm',				///
-								"off"				///	suppress trace log						
+								"off"				///	suppress trace log in optimizatin for cuestrong						
 						)
 		mat `sbeta'			= r(beta)
 		mat `sbeta'			= `sbeta''					//  row vector (Stata convention)
@@ -7006,45 +7111,38 @@ end			//  end get_strong_beta
 version 11.2
 mata:
 void s_gmm2s_beta(										///
-						scalar N,						///
-						string scalar ZX1_name,			///
-						string scalar ZX2_name,			///
-						string scalar Zy_name,			///  "raw" Zy, i.e., using y=depvar
-						string scalar wnullvector_name,	///
-						string scalar S_name			///
+						scalar nexexog,						///
+						string scalar sbeta_name,		///
+						string scalar del_z_name,			/// row vector
+						string scalar var_del_name,			///
+						string scalar pi_z_name,			///
+						string scalar var_pi_z_name,		///
+						string scalar var_pidel_z_name		///
 				)
 {
 
 	npd			= 0
 
-	b0			= st_matrix(wnullvector_name)			//  row vector of hypoth null
-// Change to column vectors
-	b0			= b0'
+	iv_sbeta		= st_matrix(sbeta_name)				// row vector of initial estimates
+	del_z			=st_matrix(del_z_name)				//  row vector
+	var_del			=st_matrix(var_del_name)
+	pi_z			=st_matrix(pi_z_name)
+	var_pi_z		=st_matrix(var_pi_z_name)
+	var_pidel_z		=st_matrix(var_pidel_z_name)
+	
+	// MD version
+	
+	kron		= (iv_sbeta'#I(nexexog))
+	psi		= var_del - kron' * var_pidel_z - (kron' * var_pidel_z)' + kron' * var_pi_z* kron
+	_makesymmetric(psi)
 
-	QZX1		= st_matrix(ZX1_name)/N
-	QZX2		= st_matrix(ZX2_name)/N
-	QZy			= st_matrix(Zy_name)/N
-	S			= st_matrix(S_name)
-
-	QZy			= QZy - QZX1*b0							//  Now QZy0 at hypoth null where y0 = y - b0*x1
-
-	aux1		= cholsolve(S, QZX2)
-	if (aux1[1,1]==.) {
-		aux1	= qrsolve(S, QZX2)
-		npd = 1
-	}
-	aux2		= makesymmetric(QZX2' * aux1)
-	aux3		= cholsolve(S, QZy)
-	if (aux3[1,1]==.) {
-		aux3	= qrsolve(S, QZy)
-		npd = 1
-	}
-	beta		= cholsolve(aux2, QZX2' * aux3)
+	aux1		= pi_z'*psi*pi_z
+	aux2		= pi_z'*psi*del_z'
+	beta		= cholsolve(aux1,aux2) // closed-form solution for MD2s
 	if (beta[1,1]==.) {
-		beta	= qrsolve(aux2, QZX2' * aux3)
+		beta	= qrsolve(aux1, aux2)
 		npd = 1
 	}
-
 	st_numscalar("r(npd)",npd)					//  npd flag is kept in Stata space
 	st_matrix("r(beta)",beta)
 
@@ -7242,10 +7340,8 @@ end
 version 11.2
 mata:
 struct ms_cuestruct {
-	string scalar	avarcmd
-	real scalar		N, LM
-	pointer matrix	e, y, Z, X, cuewvar
-	real matrix		ZZ
+	real scalar		N, nexexog
+	real matrix		del_z, var_del, pi_z, var_pi_z, var_pidel_z
 }
 end
 
@@ -7253,47 +7349,35 @@ end
 version 11.2
 mata:
 void s_cue_beta(										///
-						scalar N,						///
-						string scalar y_name,			///
-						string scalar X_names,			///
-						string scalar Z_names,			///
-						string scalar e_name,			///
+						scalar N,					///
+						scalar nexexog,						///
+						string scalar del_z_name,			/// row vector
+						string scalar var_del_name,			///
+						string scalar pi_z_name,			///
+						string scalar var_pi_z_name,		///
+						string scalar var_pidel_z_name,		///
 						string scalar touse,			///
 						string scalar binit_name,		///
-						string scalar cuewvar_name,		///
-						string scalar ZZ_name,			///
-						string scalar avarcmd,			///
-						scalar LM,						///
 						string scalar traceonoff		///
 				)
 {
 
 // Declare cuestruct
 	struct ms_cuestruct scalar cuestruct
-
-// Views
-	st_view(e, ., e_name, touse)
-	st_view(y, ., y_name, touse)
-	st_view(X, ., (X_names), touse)
-	st_view(Z, ., (Z_names), touse)
-	st_view(cuewvar, ., cuewvar_name, touse)
-
-// Pointers to views
-	cuestruct.e			= &e
-	cuestruct.Z			= &Z
-	cuestruct.cuewvar	= &cuewvar
-	cuestruct.y			= &y
-	cuestruct.X			= &X
+printf("here")
 // Scalars
-	cuestruct.N			= N
-	cuestruct.LM		= LM
+	cuestruct.N	= N
+	cuestruct.nexexog	= nexexog
 // Matrices
-	cuestruct.ZZ		= st_matrix(ZZ_name)
-// Strings
-	cuestruct.avarcmd	= avarcmd
+	cuestruct.del_z			=st_matrix(del_z_name)					//  row vector
+	cuestruct.var_del		=st_matrix(var_del_name)
+	cuestruct.pi_z			=st_matrix(pi_z_name)
+	cuestruct.var_pi_z		=st_matrix(var_pi_z_name)
+	cuestruct.var_pidel_z		=st_matrix(var_pidel_z_name)	
+
 
 	beta_init = st_matrix(binit_name)				//  row vector (Stata convention)
-													//  and Mata optimize also requires a row vector :(
+									//  and Mata optimize also requires a row vector :(
 
 // First, initialize the optimization structure in the variable S.
 // Then tell Mata where the objective function is, that it's a minimization,
@@ -7322,60 +7406,19 @@ version 11.2
 mata:
 void m_cuecrit(todo, beta, struct ms_cuestruct scalar cuestruct, j, g, H)
 {
-
-	//(*cuestruct.e)[.,.] = *cuestruct.y - *cuestruct.X * beta'	//  calc residuals given beta															//  so that Stata variable (view) is changed
-	//Ze = quadcross(*cuestruct.Z, *cuestruct.cuewvar, *cuestruct.e)
-	//gbar = 1/cuestruct.N * Ze									//  mean of moments, 1/N * Z'e
-	
-	//if (!cuestruct.LM) {										//  MD/Wald so must partial Z out of e
-	//	pihat = cholsolve(cuestruct.ZZ, Ze)
-	//	(*cuestruct.e)[.,.] = *cuestruct.e - *cuestruct.Z * pihat
-	//}
-	// * right infornt of a name is a pointer
-	ZY = quadcross(*cuestruct.Z, *cuestruct.cuewvar, *cuestruct.y)
-	ZX = quadcross(*cuestruct.Z, *cuestruct.cuewvar, *cuestruct.X)
-	aux0 = ZY-ZX * beta'
-	rhat = cholsolve(cuestruct.ZZ, aux0)
-
-	N=cuestruct.N
-	nexexog=rows(ZY)
-	nendog=cols(ZX)
-	//printf("nendog is %9.0g and nexexog is %9.0g and N is %9.0g",nendog,nexexog,N)
-	_rc = _stata(cuestruct.avarcmd,1)							//  call avar (Stata program) to get S matrix using new resids
-	if (_rc > 0) {												//  no output, get return code
-errprintf("\nError: internal call to -avar- for CUE failed\n")
-		exit(504)
-	}
-
-	omega = st_matrix("r(S)")
-
-	S=st_matrix("r(S)")
-	//printf("S dimension is %9.0g %9.0g",rows(S), cols(S))
-	S11=S[| 1,1 \ nexexog,nexexog |]
-	S12=S[| nexexog+1,1 \ rows(S),nexexog |]
-	S22=S[| nexexog+1, nexexog+1 \ rows(S),cols(S) |]
-	
-	zzinv=invsym(cuestruct.ZZ)
-
-	var_del = N * makesymmetric(zzinv*S11*zzinv) 
-	var_del=var_del[| 1,1 \ nexexog,nexexog |]
-// Kronecker structure
-	var_pi_z = N * makesymmetric(I(nendog)#zzinv * S22 * I(nendog)#zzinv) 
-	var_pidel_z = N * I(nendog)#zzinv*S12*zzinv 
-	
-	kron		= (beta'#I(nexexog))
-	psi		= var_del - kron' * var_pidel_z - (kron' * var_pidel_z)' + kron' * var_pi_z* kron
+	kron		= (beta'#I(cuestruct.nexexog))
+	psi		= cuestruct.var_del - kron' * cuestruct.var_pidel_z - (kron' * cuestruct.var_pidel_z)' ///
+			+ kron' * cuestruct.var_pi_z* kron
 	_makesymmetric(psi)
+	
+	rhat		= cuestruct.del_z'-cuestruct.pi_z * beta'
 
-	//aux1 = cholsolve(omega, gbar)
 	aux1 = cholsolve(psi,rhat)
 	if (aux1[1,1]==.) {
-	//	aux1 = qrsolve(omega, gbar)
 		aux1 = qrsolve(psi,rhat)
 		st_numscalar("r(npd)",1)
 	}
 	j = cuestruct.N * rhat' * aux1
-	//j = cuestruct.N * gbar' * aux1
 
 } // end program CUE criterion function
 end
