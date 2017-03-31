@@ -417,6 +417,9 @@ display "waldcmd is `waldcmd'"
 * ebeta is full set of Wald estimates; wbeta is weakly-ID only
 	mat `fullbeta' = e(b)											//  fullbeta has all coeffs including exogenous
 	mat `var_fullbeta'=e(V)
+	display "Wald Model estimates"
+	matrix list `fullbeta'
+	matrix list `var_fullbeta'
 	foreach cn of local endopos {									//  ebeta has all endog coeffs
 		mat `ebeta' = nullmat(`ebeta') , `fullbeta'[1,`cn']
 	}
@@ -612,12 +615,12 @@ di as err "Fixed-effects estimation requires data to be -xtset-"
 		wald_p wald_chi2 wald_df wald_r
 	tempname nullvec del_z pi_z var_del var_pidel_z var_pi_z bhat del_v
 	tempname S S11 S12 S22 zz zzinv x2z xx zx xy x1x1 x2x2 x1x2 zx1 zx2 zy x1y x2y yy
-	tempname sbeta iv_sbeta0 pi2hat
+	tempname sbeta iv_sbeta0 pi2hat var_ecuebeta var_wcuebeta var3 // for cuepoint
 	tempname bhat pi_z1 pi_z2 var_pidel_z1 var_pidel_z2 var_pi_z11 var_pi_z12 var_pi_z22
 	tempname syy see sxx sxy sxe syv sve svv AA
 	tempname citable
 	tempname nullvector wnullvector
-	tempvar vhat vhat1 vhat2 uhat uhat1 uhat2 ehat
+	tempvar vhat vhat1 vhat2 uhat uhat1 uhat2 ehat 
 
 * Misc
 	local npd=0
@@ -665,8 +668,8 @@ di as err "Fixed-effects estimation requires data to be -xtset-"
 
 		display "need to change avar if s_cue_beta works for cuepoint!"
 				//qui gen double `cuewvar' = `wf'*`wvar' if `touse'
-				tempname pi_z bhat uhat zz zzinv del_z var_pi_z var_del var_pidel_z
-				tempname S S11 S12 S22
+				//tempname pi_z bhat uhat zz zzinv del_z var_pi_z var_del var_pidel_z
+				//tempname S S11 S12 S22 // these tempnames have been created above
 
 				qui reg `depvar_t' `exexog_t' if `touse' `wtexp', nocons
 				local nexexog : word count `exexog_t'
@@ -744,6 +747,26 @@ di as err "Fixed-effects estimation requires data to be -xtset-"
 			mat colnames `ecuebeta' = `endo'
 			foreach vn of local wendo {							//  CUE estimate for weakly-ID only
 				mat `wcuebeta' = nullmat(`wcuebeta') , `ecuebeta'[1,"`vn'"]
+				display "CUE points are"
+			}
+			matrix list `wcuebeta'
+			if ~`iid' { // only implemented CUE VCV, will add VCV for other estimates later
+				mat `var_ecuebeta'=r(var_beta)
+				mat colnames `var_ecuebeta' = `endo'
+				mat rownames `var_ecuebeta' = `endo'
+				foreach vn of local wendo {
+					mat `var3' = nullmat(`var3'),`var_ecuebeta'[1...,"`vn'"] // select the columns
+				} // var3 is a temp name, var1 and var2 got used previously
+				foreach vn of local wendo {
+					mat `var_wcuebeta' = nullmat(`var_wcuebeta') \ `var3'["`vn'",1...] // select the rows
+				}
+				display "CUE VCV is for `wendo'"
+				matrix list `var_wcuebeta'
+				
+				// want to replace estimates in Wald
+				mat `ebeta' = `ecuebeta'
+				mat `wbeta' = `wcuebeta'
+				mat `var_wbeta' = `var_wcuebeta'
 			}
 		
 		}	// end CUE (overid) block
@@ -751,7 +774,7 @@ di as err "Fixed-effects estimation requires data to be -xtset-"
 	}	// end cuepoint block
 
 ***************** PREPARE VECTOR OF NULLS INCLUDING PREP FOR WEAK/STRONG ************************
-
+* This section now calculates iv_sbeta0 for get_strong_beta (needs this input to pass into construct_citable)
 	if "`wnull'"=="" {
 		mat `wnullvector' = J(1,`nwendog',0)
 		forvalues i=1/`nwendog' {
@@ -827,7 +850,7 @@ display "`s1method' `s2method'"
 * Next 2 will be missing if LIML
 		mat `iv_sbeta0'	= r(iv_sbeta0)				//  IV beta for strongly-idenfified send at null=0 (used in grid search)
 		mat `pi2hat'	= r(pi2hat)					//  RF coeffs matrix (used in grid search)
-
+/*
 		if ~`iid' {										//
 			get_strong_beta,							///
 								`s2method'				/// gmm2s or cue
@@ -852,7 +875,7 @@ display "`s1method' `s2method'"
 
 			mat `sbeta' = r(sbeta)						//  new sbeta based on efficient GMM
 		}
-
+*/
 		mat colnames `sbeta' = `sendo'
 		mat `nullvector' = `wnullvector' , `sbeta'							//  append coeffs for strong to nullvector
 	}
@@ -1412,9 +1435,9 @@ di as err "         weakiv rk stat df=`rk_df'; ranktest id stat df=`idstat_df'
 		ereturn local	gridpoints			"`gridpoints'"
 		ereturn scalar	points				=`points'
 	}
-	if e(sendo_ct) {											//  save strongly-identified beta at specified null
-		ereturn matrix	sbeta			=`sbeta'
-	}
+	//if e(sendo_ct) { //  save strongly-identified beta at specified null (obsolete- no longer calculate beta at null
+	//	ereturn matrix	sbeta			=`sbeta'
+	//}
 	if `cuepoint' {
 		ereturn matrix	cuebeta			=`ecuebeta'
 	}
@@ -6186,6 +6209,8 @@ dis "gridcols is `gridcols'"
 				forvalues i=1/`nwendog' {
 					local kp`i'_r = r(kp`i'_r)
 					local lc_gmmp`i'_r = r(lc_gmmp`i'_r)
+					dis "is it wrong"
+					matrix list `k_chi2p'
 					// and record a_diff for each projection test - need to return k_chi2p and calculate invchi2_1_df
 					local a_diffp`i'= (`invchi2_1_df'-`k_chi2p'[1,`i'])/`ar_chi2'*cond(`wald_chi2p'[1,`i']>`invchi2_1_df',1,0)
 				}		
@@ -7100,6 +7125,7 @@ program get_strong_beta, rclass
 		mat `sbeta'			= r(beta)
 		mat `sbeta'			= `sbeta''					//  row vector (Stata convention)
 		return mat sbeta	= `sbeta'					//  strong CUE beta at specified null
+		//return mat var_sbeta	= r(var_beta)				// VCV for CUE beta - not really needed
 		scalar `npd'		= r(npd)
 		return scalar npd	= `npd'
 
@@ -7398,6 +7424,21 @@ printf("here")
 	beta = beta'									//  col vector
 
 	st_matrix("r(beta)", beta)
+	// calculate CUE VCV
+	kron		= (beta#I(cuestruct.nexexog))
+	psi		= cuestruct.var_del - kron' * cuestruct.var_pidel_z - (kron' * cuestruct.var_pidel_z)' ///
+			+ kron' * cuestruct.var_pi_z* kron
+	_makesymmetric(psi)
+	aux1		= cholsolve(psi,cuestruct.pi_z)
+	if (aux1[1,1]==.) {
+		aux1 = qrsolve(psi,cuestruct.pi_z)
+		st_numscalar("r(npd)",1)
+	}
+	var_beta	= invsym(cuestruct.pi_z' * aux1)
+printf("size of CUE VCV is %9.0g %9.0g",cols(var_beta),rows(var_beta))
+printf("cue is %17.0g",beta[1,1])
+printf("variance is %17.0g",var_beta[1,1])
+	st_matrix("r(var_beta)", var_beta)
 	
 }
 end
@@ -7800,8 +7841,10 @@ timer on 2
 		forvalues i = 1/`nwendog' {
 			local lc_2slsp`i'_r= cond(`lc_2slsp'[1,`i']>`lc_crit_p'	,1,0)
 			return scalar lc_2slsp`i'_r= `lc_2slsp`i'_r'
-			local k_2slsp`i'_r= cond(`k_2slsp'[1,`i']>`invchi2_1_df'    ,1,0)
-			return scalar k_2slsp`i'_r= `k_2slsp`i'_r'
+			if (strpos("`gridcols'", "k_2slsp")) {
+				local k_2slsp`i'_r= cond(`k_2slsp'[1,`i']>`invchi2_1_df'    ,1,0)
+				return scalar k_2slsp`i'_r= `k_2slsp`i'_r'
+			}
 		}	
 	}
 
@@ -7818,8 +7861,11 @@ timer on 2
 		forvalues i = 1/`nwendog' {
 			local lc_gmmp`i'_r= cond(`lc_gmmp'[1,`i']>`lc_crit_p'	,1,0)
 			return scalar lc_gmmp`i'_r= `lc_gmmp`i'_r'
-			local kp`i'_r= cond(`kp'[1,`i']>`invchi2_1_df'    ,1,0)
-			return scalar kp`i'_r= `kp`i'_r'
+			if (strpos("`gridcols'", "kp")) {
+				dis "1,1 invalid name is probably here - lc_gmm and k need to be separately"
+				local kp`i'_r= cond(`kp'[1,`i']>`invchi2_1_df'    ,1,0)
+				return scalar kp`i'_r= `kp`i'_r'
+			}
 		}	
 	}
 
