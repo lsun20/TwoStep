@@ -615,7 +615,7 @@ di as err "Fixed-effects estimation requires data to be -xtset-"
 		wald_p wald_chi2 wald_df wald_r
 	tempname nullvec del_z pi_z var_del var_pidel_z var_pi_z bhat del_v
 	tempname S S11 S12 S22 zz zzinv x2z xx zx xy x1x1 x2x2 x1x2 zx1 zx2 zy x1y x2y yy
-	tempname sbeta iv_sbeta0 pi2hat var_ecuebeta var_wcuebeta var3 // for cuepoint
+	tempname sbeta iv_sbeta0 pi2hat ecuebeta wcuebeta var_ecuebeta var_wcuebeta var3 // for cuepoint
 	tempname bhat pi_z1 pi_z2 var_pidel_z1 var_pidel_z2 var_pi_z11 var_pi_z12 var_pi_z22
 	tempname syy see sxx sxy sxe syv sve svv AA
 	tempname citable
@@ -631,24 +631,24 @@ di as err "Fixed-effects estimation requires data to be -xtset-"
 	local invchi2_1_df = invchi2(1, `k_level'/100)
 
 ******************************** CUE point estimator if requested **************************
-	if `cuepoint' {
 
-		tempname ecuebeta wcuebeta
+	if `cuepoint' {
 
 		if ~`overid' {								//  if exactly-ID, CUE=LIML=IV
 			mat `ecuebeta'	= `ebeta'
 			mat `wcuebeta'	= `wbeta'
 		}
-		else {
-			computecrossprods, touse(`touse') wtexp(`wtexp') exexog(`exexog_t') wendo(`endo_t') depvar(`depvar_t')
+		else { // calculate LIML or CUE estimates
+			/*computecrossprods, touse(`touse') wtexp(`wtexp') exexog(`exexog_t') wendo(`endo_t') depvar(`depvar_t')
 			mat `zz'	= r(zz)
 			mat `xx'	= r(x1x1)
 			mat `zx'	= r(zx1)
 			mat `xy'	= r(x1y)
 			mat `zy'	= r(zy)
 			mat `yy'	= r(yy)
-	
+			*/
 			if `iid' {
+			/*
 				mata: s_liml(							///
 									`N',				///
 									"`zz'",				///
@@ -658,88 +658,82 @@ di as err "Fixed-effects estimation requires data to be -xtset-"
 									"`zy'",				///
 									"`yy'"				///
 								)
+			*/
+ 		
+
+				computematrices_iid ,		///
+					cons(`cons')		/// cons=1 if constant in model (ivprobit/tobit)
+					touse(`touse')		///
+					wtexp(`wtexp')		///
+					model(`model')		///
+					depvar(`depvar_t')	///
+					endo(`endo_t')		/// first weak, then strong
+					exexog(`exexog_t')	///
+					inexog("")		/// empty/partialled-out unless ivprobit/tobit
+					nendog(`nendog')	///
+					nexexog(`nexexog')	///
+					ntinexog(0)		/// #exogenous regressors included in tests
+					npartial(`npartial')	/// #inexog partialled-out
+					nobs(`N')		///
+					dofminus(`dofminus')	/// For iid FE case sigmas, adjustment for #groups needed
+					ssa(`ssa')		/// small-sample adjustment
+					lm(0)			
+
+				mat `var_pi_z'	=r(var_pi_z)	
+				mat `pi_z'		=r(pi_z)
+				mat `var_del'	=r(var_del)
+				mat `var_pidel_z' = J(`nendog'*`nexexog',`nexexog',0) // iid case covariance is zero
+				mat `del_z'		=r(del_z)
+				di as text "Obtaining LIML point estimates..."
+
+				mata: s_cue_beta(					///
+							`N',			///
+							`nexexog',		/// number of instruments
+							"`del_z'",		/// row vector
+							"`var_del'",		///
+							"`pi_z'",		///
+							"`var_pi_z'",		///
+							"`var_pidel_z'",	///
+							"`touse'",		///
+							"`ebeta'",		/// use all Wald endog for starting values
+							"on"			///	show CUE trace log in optimizatin for cuepoint					
+						)		
 			}
 			else {
-		
-				//tempvar cuewvar ehat
-				//qui gen double `ehat' = . if `touse'
-				//local avarcmd	"avar (`ehat') (`exexog_t') if `touse' `wtexp', `vceopt' nocons"
-				//local avarcmd	"avar (`depvar_t' `endo_t') (`exexog_t') if `touse' `wtexp', `vceopt' nocons"
+					
+				computematrices_robust,		///
+					touse(`touse')		///
+					wtexp(`wtexp')		///
+					vceopt(`vceopt')	///
+					depvar(`depvar_t')	///
+					endo(`endo_t')		/// 
+					exexog(`exexog_t')	///
+					nendog(`nendog')	///
+					nexexog(`nexexog')	///
+					npartial(`npartial')	/// #inexog partialled-out (but not used in this program)
+					nobs(`N')		///
+					dofminus(`dofminus')	///
+					ssa(`ssa')		/// small-sample adjustment
+					lm(0)
 
-		display "need to change avar if s_cue_beta works for cuepoint!"
-				//qui gen double `cuewvar' = `wf'*`wvar' if `touse'
-				//tempname pi_z bhat uhat zz zzinv del_z var_pi_z var_del var_pidel_z
-				//tempname S S11 S12 S22 // these tempnames have been created above
-
-				qui reg `depvar_t' `exexog_t' if `touse' `wtexp', nocons
-				local nexexog : word count `exexog_t'
-				local nendog : word count `endo_t'
-				display "N is `N' nexexog is `nexexog'"
-
-				mat `bhat'=e(b)
-				mat `del_z'=`bhat'[1...,1..`nexexog']						//  row vector
-				qui predict double `uhat' if `touse', resid
-
-				* RF estimations
-				* Accumulate pi_z matrix and list of RF residuals Vhat
-				mata: `pi_z' = J(`nexexog',0,.)
-				foreach var of varlist `endo_t' {
-					tempvar vhat_`var'
-					qui reg `var' `exexog_t' if `touse' `wtexp', nocons
-					qui predict double `vhat_`var'' if `touse', resid
-					local Vhat "`Vhat' `vhat_`var''"
-					mata: `bhat' = st_matrix("e(b)")
-					mata: `bhat' = `bhat'[| 1,1 \ .,`nexexog' |]
-					mata: `bhat' = `bhat''
-					mata: `pi_z' = `pi_z' , `bhat'
-				}
-		
-				cap avar (`uhat' `Vhat') (`exexog_t') if `touse' `wtexp', `vceopt' nocons 
-		
-				if _rc>0 {
-					di as err "error - internal call to avar failed"
-					exit _rc
-				}
-		
-				mata: `S'=st_matrix("r(S)")
-				mata: `S11'=`S'[| 1,1 \ `nexexog',`nexexog' |]
-				mata: `S12'=`S'[| `nexexog'+1,1 \ rows(`S'),`nexexog' |]
-				mata: `S22'=`S'[| `nexexog'+1, `nexexog'+1 \ rows(`S'),cols(`S') |]
-
-				qui mat accum `zz' = `exexog_t' if `touse' `wtexp', nocons
-				mata: `zz'=st_matrix("`zz'")
-				mata: `zzinv'=invsym(`zz')
-				tempname aux1 aux2
-				mata: `var_del' = `N' * makesymmetric(`zzinv'*`S11'*`zzinv') 
-				mata: `var_del'=`var_del'[| 1,1 \ `nexexog',`nexexog' |]
-				// Kronecker structure
-				mata: `var_pi_z' = `N' * makesymmetric(I(`nendog')#`zzinv'*`S22'*I(`nendog')#`zzinv') 
-				mata: `var_pidel_z' = `N' * I(`nendog')#`zzinv'*`S12'*`zzinv' 
-				mata: st_matrix("r(`pi_z')",`pi_z')
-				mata: st_matrix("r(`var_del')",`var_del')
-				mata: st_matrix("r(`var_pi_z')",`var_pi_z')
-				mata: st_matrix("r(`var_pidel_z')",`var_pidel_z')
-				mat `pi_z'=r(`pi_z')
-				mat `var_del'=r(`var_del')
-				mat `var_pi_z'=r(`var_pi_z')
-				mat `var_pidel_z'=r(`var_pidel_z')
-
-				mata: mata drop `zz' `zzinv' `S' `S11' `S12' `S22' `bhat'			// clean up Mata memory
-				mata: mata drop `var_del' `var_pi_z'
-				mata: mata drop `pi_z' `var_pidel_z'
+				mat `del_z'		= r(del_z)
+				mat `var_pi_z'		= r(var_pi_z)
+				mat `pi_z'		= r(pi_z)
+				mat `var_del'		= r(var_del)
+				mat `var_pidel_z'	= r(var_pidel_z)
 				di as text "Obtaining CUE point estimates..."
-				mata: s_cue_beta(							///
-									`N',				///
-									`nexexog',			/// number of instruments
-									"`del_z'",		/// row vector
-									"`var_del'",		///
-									"`pi_z'",		///
-									"`var_pi_z'",		///
-									"`var_pidel_z'",		///
-									"`touse'",			///
-									"`ebeta'",			/// use all Wald endog for starting values
-									"on"				/// show CUE trace log
-								)
+				mata: s_cue_beta(						///
+							`N',			///
+							`nexexog',		/// number of instruments
+							"`del_z'",		/// row vector
+							"`var_del'",		///
+							"`pi_z'",		///
+							"`var_pi_z'",		///
+							"`var_pidel_z'",	///
+							"`touse'",		///
+							"`ebeta'",		/// use all Wald endog for starting values
+							"on"			/// show CUE trace log
+						)
 			}
 	
 			mat `ecuebeta'=r(beta)								//  CUE estimate for all endogenous
@@ -747,31 +741,136 @@ di as err "Fixed-effects estimation requires data to be -xtset-"
 			mat colnames `ecuebeta' = `endo'
 			foreach vn of local wendo {							//  CUE estimate for weakly-ID only
 				mat `wcuebeta' = nullmat(`wcuebeta') , `ecuebeta'[1,"`vn'"]
-				display "CUE points are"
 			}
-			matrix list `wcuebeta'
-			if ~`iid' { // only implemented CUE VCV, will add VCV for other estimates later
-				mat `var_ecuebeta'=r(var_beta)
-				mat colnames `var_ecuebeta' = `endo'
-				mat rownames `var_ecuebeta' = `endo'
-				foreach vn of local wendo {
-					mat `var3' = nullmat(`var3'),`var_ecuebeta'[1...,"`vn'"] // select the columns
-				} // var3 is a temp name, var1 and var2 got used previously
-				foreach vn of local wendo {
-					mat `var_wcuebeta' = nullmat(`var_wcuebeta') \ `var3'["`vn'",1...] // select the rows
-				}
-				display "CUE VCV is for `wendo'"
-				matrix list `var_wcuebeta'
+			// Also obtain CUE VCV, will add VCV for other estimates later
+			mat `var_ecuebeta'=r(var_beta)
+			mat colnames `var_ecuebeta' = `endo'
+			mat rownames `var_ecuebeta' = `endo'
+			foreach vn of local wendo {
+				mat `var3' = nullmat(`var3'),`var_ecuebeta'[1...,"`vn'"] // select the columns
+			} // var3 is a temp name, var1 and var2 got used previously
+			foreach vn of local wendo {
+				mat `var_wcuebeta' = nullmat(`var_wcuebeta') \ `var3'["`vn'",1...] // select the rows
+			}
+			display "CUE VCV is for `wendo'"
+			matrix list `var_wcuebeta'
 				
-				// want to replace estimates in Wald
-				mat `ebeta' = `ecuebeta'
-				mat `wbeta' = `wcuebeta'
-				mat `var_wbeta' = `var_wcuebeta'
-			}
+			// Replace previous estimates in Wald model (i.e. ivreg2)
+			mat `ebeta' = `ecuebeta'
+			mat `wbeta' = `wcuebeta'
+			mat `var_wbeta' = `var_wcuebeta'
 		
 		}	// end CUE (overid) block
 
-	}	// end cuepoint block
+	}
+	else if `forcerobust' != 1&"`robust'" == "" {
+		di as text "Obtaining 2SLS point estimates..."
+		computecrossprods, touse(`touse') wtexp(`wtexp') exexog(`exexog_t') wendo(`endo_t') depvar(`depvar_t')
+			mat `zz'     = r(zz)
+			mat `x1x1'   = r(x1x1)
+			mat `zx1'    = r(zx1)
+			mat `x1y'    = r(x1y)
+			mat `zy'     = r(zy)
+			mat `yy'     = r(yy)
+			
+	* Always need to use an iid method (IV), either for final strong beta or for initial value for non-iid strong beta
+		mat `wnullvector' = J(1,`nendog',0) // set to zero so iv_s_beta goes through
+		get_strong_beta,							///
+							iv				///  IV
+							nobs(`N')				///
+							b0(`wnullvector')		///
+							zz(`zz')				///
+							x1x1(`x1x1')			///
+							x1x2(`x1x1')			///
+							x2x2(`x1x1')			///
+							zx1(`zx1')				///
+							zx2(`zx1')				///
+							x1y(`x1y')				///
+							x2y(`x1y')				///
+							zy(`zy')				///
+							yy(`yy')
+
+		mat `sbeta'		= r(sbeta)
+		dis "2sls estimates are"	
+		mat list `sbeta'
+		// 2sls variance
+		tempname ee var_2slsbeta aux0 zzinv
+		tempvar ehat
+		qui gen double `ehat' = `depvar_t' if `touse'	
+		local i=1
+		foreach var of varlist `endo_t' {
+			qui replace `ehat' = `ehat' - `sbeta'[1,`i']*`var'
+			local ++i
+		}
+		mat accum `ee' =  `ehat' if `touse' `wtexp', nocons
+		mat `zzinv' = invsym(`zz')
+		mat `aux0' = `zx1''*`zzinv'*`zx1'
+		mat `var_2slsbeta' = `ee'*invsym(`aux0')/(`N'-`dofminus')*`ssa'
+		mat list `var_2slsbeta'
+	} 
+	else if `forcerobust' == 1|"`robust'" == "robust" {
+		computematrices_robust,		///
+					touse(`touse')		///
+					wtexp(`wtexp')		///
+					vceopt(`vceopt')	///
+					depvar(`depvar_t')	///
+					endo(`endo_t')		/// 
+					exexog(`exexog_t')	///
+					nendog(`nendog')	///
+					nexexog(`nexexog')	///
+					npartial(`npartial')	/// #inexog partialled-out (but not used in this program)
+					nobs(`N')		///
+					dofminus(`dofminus')	///
+					ssa(`ssa')		/// small-sample adjustment
+					lm(0)
+
+		mat `del_z'		= r(del_z)
+		mat `var_pi_z'		= r(var_pi_z)
+		mat `pi_z'		= r(pi_z)
+		mat `var_del'		= r(var_del)
+		mat `var_pidel_z'	= r(var_pidel_z)
+		di as text "Obtaining MD-2step point estimates..."
+
+		mata: s_gmm2s_beta(							///
+								`N',			///
+								`nexexog',		/// number of instruments
+								"`ebeta'",		/// initial inefficient 1st-step sbeta is provided
+								"`del_z'",		/// row vector
+								"`var_del'",		///
+								"`pi_z'",		///
+								"`var_pi_z'",		///
+								"`var_pidel_z'",	///
+								1		/// flag for calculating variance
+						)
+
+			mat `ecuebeta'=r(beta)								//  CUE estimate for all endogenous
+			mat `ecuebeta'=`ecuebeta''							//  row vector (Stata convention)
+			mat colnames `ecuebeta' = `endo'
+			foreach vn of local wendo {							//  CUE estimate for weakly-ID only
+				mat `wcuebeta' = nullmat(`wcuebeta') , `ecuebeta'[1,"`vn'"]
+			}
+			// Also obtain CUE VCV, will add VCV for other estimates later
+			mat `var_ecuebeta'=r(var_beta)
+			mat colnames `var_ecuebeta' = `endo'
+			mat rownames `var_ecuebeta' = `endo'
+			foreach vn of local wendo {
+				mat `var3' = nullmat(`var3'),`var_ecuebeta'[1...,"`vn'"] // select the columns
+			} // var3 is a temp name, var1 and var2 got used previously
+			foreach vn of local wendo {
+				mat `var_wcuebeta' = nullmat(`var_wcuebeta') \ `var3'["`vn'",1...] // select the rows
+			}
+			display "MD estimates for endo"
+			matrix list `ecuebeta'
+			display "MD 2step VCV is for `endo'"
+			matrix list `var_ecuebeta'
+				
+			// Replace previous estimates in Wald model (i.e. ivreg2)
+			//mat `ebeta' = `ecuebeta'
+			//mat `wbeta' = `wcuebeta'
+			//mat `var_wbeta' = `var_wcuebeta'
+		
+	
+	} // end cuepoint block
 
 ***************** PREPARE VECTOR OF NULLS INCLUDING PREP FOR WEAK/STRONG ************************
 * This section now calculates iv_sbeta0 for get_strong_beta (needs this input to pass into construct_citable)
@@ -813,26 +912,10 @@ di as err "error: number of weakly endogenous (`nwendog') doesn't match number o
 		mat `zy'     = r(zy)
 		mat `yy'     = r(yy)
 		
-		if `iid' & `cuestrong' {
-			local s1method	"liml"
-		}
-		else if `iid' {
-			local s1method	"iv"
-		}
-		else if `cuestrong' {
-			local s1method	"iv"
-			local s2method	"cue"
-			display "cue used"
-		}
-		else {
-			local s1method	"iv"
-			local s2method	"gmm2s"
-			display "gmm2s used"
-		}
-display "`s1method' `s2method'"
-* Always need to use an iid method (LIML or IV), either for final strong beta or for initial value for non-iid strong beta
+
+* Always need to use an iid method (IV), either for final strong beta or for initial value for non-iid strong beta
 		get_strong_beta,							///
-							`s1method'				/// either LIML or IV
+							iv				///  IV
 							nobs(`N')				///
 							b0(`wnullvector')		///
 							zz(`zz')				///
@@ -845,10 +928,11 @@ display "`s1method' `s2method'"
 							x2y(`x2y')				///
 							zy(`zy')				///
 							yy(`yy')
+dis "here"
 
 		mat `sbeta'		= r(sbeta)
-* Next 2 will be missing if LIML
 		mat `iv_sbeta0'	= r(iv_sbeta0)				//  IV beta for strongly-idenfified send at null=0 (used in grid search)
+		// if b0=0, then sbeta=iv_sbeta0
 		mat `pi2hat'	= r(pi2hat)					//  RF coeffs matrix (used in grid search)
 /*
 		if ~`iid' {										//
@@ -1023,7 +1107,7 @@ di as err "         weakiv rk stat df=`rk_df'; ranktest id stat df=`idstat_df'
 			local wgridbeta		"`wbeta'"
 			local usecue		0
 		}
-	
+
 		construct_grid, 				///
 			gridlist(`gridlist')		///
 			gridpoints(`gridpoints')	///
@@ -5307,7 +5391,8 @@ program define computematrices_iid, rclass
 			]
 	tempname pi_z bhat AA zz zzinv var_pi_z var_del del_z del_v ehat
 	tempname syy see sxx sxy syv svv sve sxe
-
+dis "change lm to md: ntinexog `ntinexog'"
+local lm = 0
 	local N = `nobs'
 			
 	if `cons' {													//  cons=1 if constant in model after partialling-out
@@ -5356,7 +5441,8 @@ program define computematrices_iid, rclass
 		matrix `sve'	= `AA'[`rc3'..`rc4',2..2]         * 1/(`N'-`dofminus') * `ssa'
 *		matrix `sxe'	= `AA'[`rc1'..`rc2',2..2] * 1/(`N'-`dofminus') * `ssa'		//  same as sve
 	}
-	else {																			//  need only svv for Wald/MD version
+	else {				
+	dis "dofminus is `dofminus' ssa is `ssa'"															//  need only svv for Wald/MD version
 		qui mat accum `AA' = `Vhat' if `touse' `wtexp', noconstant
 		mat `svv' = `AA'  * 1/(`N'-`dofminus') * `ssa'								//  so same dfn as with LM version
 	}
@@ -5406,6 +5492,7 @@ program define computematrices_iid, rclass
 	return mat del_z	= `del_z'
 	return mat del_v	= `del_v'
 	return mat svv		= `svv'
+
 	if `lm' {
 		return mat syy		= `syy'
 		return mat see		= `see'
@@ -5437,7 +5524,8 @@ program define computematrices_robust, rclass
 timer on 5		
 	tempname pi_z bhat uhat zz zzinv del_z var_pi_z var_del var_pidel_z
 	tempname S S11 S12 S22
-
+dis "change lm to md"
+local lm = 0
 	local N = `nobs'
 
 	qui reg `depvar' `exexog' if `touse' `wtexp', nocons
@@ -5909,32 +5997,33 @@ timer on 9
 			mata: st_matrix("`wgridnullvector'", `gridnullvector')
 			mat `gridnullvector'  = `wgridnullvector' 							//  So gridnull vector is in Mata and Stata
 timer off 9
-			if `nsendog'>0 {													//  append coeffs for strong (if any) to nullvector
-		
+			if `nsendog'>0 {	
+												//  append coeffs for strong (if any) to nullvector
+				get_strong_beta, /// IV estimator used for strong coeffs; also init beta for gmm2s or cue
+						iv						///
+						b0(`wgridnullvector')	///
+						iv_sbeta0(`iv_sbeta0')	///
+						pi2hat(`pi2hat')
+				mat `sbeta' = r(sbeta)	
+
 				if `iid' & `cuestrong' {
-					get_strong_beta,							///
-										liml					/// LIML, from scratch
-										nobs(`nobs')			///
-										b0(`wgridnullvector')	///
-										zz(`zz')				///
-										x1x1(`x1x1')			///
-										x1x2(`x1x2')			///
-										x2x2(`x2x2')			///
-										zx1(`zx1')				///
-										zx2(`zx2')				///
-										x1y(`x1y')				///
-										x2y(`x2y')				///
-										zy(`zy')				///
-										yy(`yy')
+				
+					get_strong_beta,			///
+							liml			/// LIML, using CUE approach
+							nobs(`nobs')		///
+							b0(`wgridnullvector')	///
+							sbeta(`sbeta')		/// 1st-step IV estimator for strong endog at specified null
+							lm(`lm')		///
+							depvar(`depvar_t')	///
+							wendo(`wendo_t')	///
+							sendo(`sendo_t')	///
+							exexog(`exexog_t')	///
+							touse(`touse')		///
+							wtexp(`wtexp')			
+					mat `sbeta' = r(sbeta)			//  new sbeta based on efficient LIML-MD						
+
 				}
-				else {
-					get_strong_beta,							/// IV estimator used for strong coeffs; also init beta for gmm2s or cue
-										iv						///
-										b0(`wgridnullvector')	///
-										iv_sbeta0(`iv_sbeta0')	///
-										pi2hat(`pi2hat')
-				}
-				mat `sbeta' = r(sbeta)							//  either LIML or IV for strong coeffs
+
 
 				if ~`iid' {
 					if `cuestrong' {
@@ -5944,29 +6033,32 @@ timer off 9
 						local s2method	"gmm2s"
 					}
 					get_strong_beta,							///
-										`s2method'				/// 2-step GMM or CUE used for strong coeffs
-										nobs(`nobs')			///
-										lm(`lm')				///
-										b0(`wgridnullvector')	///
-										sbeta(`sbeta')			/// 1st-step IV estimator for strong endog at specified null
-										zz(`zz')				///
-										x1x2(`x1x2')			///
-										zx1(`zx1')				///
-										zx2(`zx2')				///
-										zy(`zy')				///
-										depvar(`depvar_t')		///
-										wendo(`wendo_t')		///
-										sendo(`sendo_t')		///
-										exexog(`exexog_t')		///
-										touse(`touse')			///
-										vceopt(`vceopt')		///
-										wtexp(`wtexp')			///
-										wvar(`wvar')			///
-										wf(`wf')
+							`s2method'				/// 2-step GMM or CUE used for strong coeffs
+							nobs(`nobs')			///
+							lm(`lm')				///
+							b0(`wgridnullvector')	///
+							sbeta(`sbeta')			/// 1st-step IV estimator for strong endog at specified null
+							zz(`zz')				///
+							x1x2(`x1x2')			///
+							zx1(`zx1')				///
+							zx2(`zx2')				///
+							zy(`zy')				///
+							depvar(`depvar_t')		///
+							wendo(`wendo_t')		///
+							sendo(`sendo_t')		///
+							exexog(`exexog_t')		///
+							touse(`touse')			///
+							vceopt(`vceopt')		///
+							wtexp(`wtexp')			///
+							wvar(`wvar')			///
+							wf(`wf')
+							
 					mat `sbeta' = r(sbeta)						//  new sbeta based on efficient GMM (2-step or CUE)
 				}
+
 				mat `gridnullvector' = `wgridnullvector' , `sbeta'		// new gridnullvector is weak null followed by strong beta
 				mata: `gridnullvector' = st_matrix("`gridnullvector'")	// and replace Mata version as well
+
 			}
 
 * calculate test stats
@@ -6820,15 +6912,15 @@ timer_on(1)
 // Need to disable LM to match with MD result
 // LM versions of AR, K and J are just rescalings of MD/Wald versions
 // CLR does not change.
-		if (iid & lm) {
-		printf ("HERE causes iid error")
-			s2lm		= syy - 2*nullvector'*sxy + nullvector'*sxx*nullvector
-			s2			= see - 2*nullvector'*sve + nullvector'*svv*nullvector
-			ar_chi2		= ar_chi2 * s2/s2lm
-			k_chi2		= k_chi2  * s2/s2lm
-			j_chi2		= ar_chi2 - k_chi2
-		printf("HERE")	
-		}
+		//if (iid & lm) {
+		//printf ("HERE causes iid error")// try disable this adjustment since we switch to MD for iid case as well
+		//	s2lm		= syy - 2*nullvector'*sxy + nullvector'*sxx*nullvector
+		//	s2			= see - 2*nullvector'*sve + nullvector'*svv*nullvector
+		//	ar_chi2		= ar_chi2 * s2/s2lm
+		//	k_chi2		= k_chi2  * s2/s2lm
+		//	j_chi2		= ar_chi2 - k_chi2
+		//printf("HERE")	
+		//}
 
 // Calculate LC_2sls, which needs K with 2sls weight statistics
 		if (strpos(gridcols, "lc_2sls")) {
@@ -6938,35 +7030,9 @@ program get_strong_beta, rclass
 
 	tempname S npd
 	tempvar y0 ehat
+dis "iv `iv' gmm2s `gmm2s' liml `liml' cue `cue'"	
 
 *************** ONE-STEP ESTIMATORS: LIML, IV **********************
-
-	if "`liml'"~="" {
-		tempname sbeta
-		mata: s_sliml(								///
-								`nobs',				///
-								"`zz'",				///
-								"`x1x1'",			///
-								"`x1x2'",			///
-								"`x2x2'",			///
-								"`zx1'",			///
-								"`zx2'",			///
-								"`x1y'",			///
-								"`x2y'",			///
-								"`zy'",				///
-								"`yy'",				///
-								"`b0'",				/// rowvector
-								0,					/// L = #exexog + #inexog ... but not needed for LIML beta
-								1,					/// flag=1 => calculate beta as well as lambda
-								0					/// flag LM=0, MD=1 ... but not needed for LIML beta
-							)
-		mat `sbeta'			= r(beta)								//  strong IV beta at specified null
-		mat `sbeta'			= `sbeta''								//  row vector (Stata convention)
-		return mat sbeta	= `sbeta'
-		scalar `npd'		= r(npd)
-		return scalar npd	= `npd'
-	}
-
 	if "`iv'"~="" {
 		tempname sbeta
 		local calcflag		= ("`iv_sbeta0'"=="")	//  flag=0 => need to calculate iv_sbeta0 & pi2hat
@@ -6994,11 +7060,99 @@ program get_strong_beta, rclass
 			return mat pi2hat		= `pi2hat'						//  return RF matrix for later use
 		}
 		mat `sbeta'				= r(beta)							//  col vector (Mata convention)
+		dis "initial sbeta"						//  strong IV beta at specified null
+		mat list `sbeta'
 		mat `sbeta'				= `sbeta''							//  row vector (Stata convention)
-		return mat sbeta		= `sbeta'							//  strong IV beta at specified null
+		return mat sbeta		= `sbeta'	
 		scalar `npd'			= r(npd)
 		return scalar npd	= `npd'
 	}	//  end calc of strong IV beta
+* All LIML, 2step and CUE need y0 = y - b0*x1 = y at hypoth null
+* and ehat = y0 - sbeta*x2 = resids from inefficient IV sbeta
+// can't leave space in the macro!
+	if "`liml'`gmm2s'`cue'"~="" {	
+		tempname pi_z bhat uhat zz zzinv del_z var_pi_z var_del var_pidel_z
+		tempname S S11 S12 S22
+		
+		qui gen double `y0' = `depvar' if `touse'			//  calc y0 = y at hypoth null; also used by CUE
+		local i=1
+		foreach var of varlist `wendo' {
+			qui replace `y0' = `y0' - `b0'[1,`i']*`var'
+			local ++i
+		}
+		local nexexog : word count `exexog'
+		local nendog : word count `sendo'
+	
+	}
+	
+	if "`liml'"~="" { // changing to MD
+		computematrices_iid ,						///
+			cons(0)							/// cons=1 if constant in model (ivprobit/tobit)
+			touse(`touse')							///
+			wtexp(`wtexp')							///
+			model("linear")							///
+			depvar(`y0')						///
+			endo(`sendo')				/// first weak, then strong
+			exexog(`exexog')						///
+			inexog("")						/// empty/partialled-out unless ivprobit/tobit
+			nendog(`nendog')						///
+			nexexog(`nexexog')						///
+			ntinexog(0)					/// #exogenous regressors included in tests
+			npartial(0)					/// #inexog partialled-out
+			nobs(`nobs')								///
+			dofminus(0)					/// For iid FE case sigmas, adjustment for #groups needed
+			ssa(1)								/// small-sample adjustment
+			lm(0)								///
+			//llopt(`llopt')							/// ivtobit options
+			//ulopt(`ulopt')							///
+			//asis(`asis')							//  ivprobit options
+
+		mat `var_pi_z'	=r(var_pi_z)	
+		mat `pi_z'		=r(pi_z)
+		mat `var_del'	=r(var_del)
+		mat `var_pidel_z' = J(`nendog'*`nexexog',`nexexog',0) // iid case covariance is zero
+		mat `del_z'		=r(del_z)
+dis "use CUE-MD for LIML so also need sbeta"
+
+		mata: s_cue_beta(							///
+								`nobs',				///
+								`nexexog',		/// number of instruments
+								"`del_z'",		/// row vector
+								"`var_del'",		///
+								"`pi_z'",		///
+								"`var_pi_z'",		///
+								"`var_pidel_z'",		///
+								"`touse'",			///
+								"`sbeta'",			/// 1st-step sbeta is provided to get_strong_beta
+								"off"				///	suppress trace log in optimizatin for cuestrong						
+						)
+		/*mata: s_sliml(								///
+								`nobs',				///
+								"`zz'",				///
+								"`x1x1'",			///
+								"`x1x2'",			///
+								"`x2x2'",			///
+								"`zx1'",			///
+								"`zx2'",			///
+								"`x1y'",			///
+								"`x2y'",			///
+								"`zy'",				///
+								"`yy'",				///
+								"`b0'",				/// rowvector
+								0,					/// L = #exexog + #inexog ... but not needed for LIML beta
+								1,					/// flag=1 => calculate beta as well as lambda
+								0					/// flag LM=0, MD=1 ... but not needed for LIML beta
+							)
+		*/
+		mat `sbeta'			= r(beta)								//  strong IV beta at specified null
+		mat `sbeta'			= `sbeta''								//  row vector (Stata convention)
+		return mat sbeta	= `sbeta'
+		scalar `npd'		= r(npd)
+		return scalar npd	= `npd'
+
+	}
+
+
 
 *************** TWO-STEP ESTIMATORS: 2-STEP GMM, CUE **********************
 
@@ -7006,92 +7160,41 @@ program get_strong_beta, rclass
 * and ehat = y0 - sbeta*x2 = resids from inefficient IV sbeta
 
 	if "`gmm2s'`cue'"~="" {
+		computematrices_robust,						///
+			touse(`touse')							///
+			wtexp(`wtexp')							///
+			vceopt(`vceopt')						///
+			depvar(`y0')						///
+			endo(`sendo')		/// 
+			exexog(`exexog')						///
+			nendog(`nendog')						///
+			nexexog(`nexexog')						///
+			npartial(0)					/// #inexog partialled-out (but not used in this program)
+			nobs(`nobs')					///
+			dofminus(0)					///
+			ssa(1)								/// small-sample adjustment
+			lm(0)
 
-		qui gen double `y0' = `depvar' if `touse'			//  calc y0 = y at hypoth null; also used by CUE
-		local i=1
-		foreach var of varlist `wendo' {
-			qui replace `y0' = `y0' - `b0'[1,`i']*`var'
-			local ++i
-		}
-		
-		tempname pi_z bhat uhat zz zzinv del_z var_pi_z var_del var_pidel_z
-		tempname S S11 S12 S22
-		local N = `nobs'
-
-		qui reg `y0' `exexog' if `touse' `wtexp', nocons
-		local nexexog : word count `exexog'
-		local nendog : word count `sendo'
-		display "N is `N' nexexog is `nexexog'"
-
-		mat `bhat'=e(b)
-		mat `del_z'=`bhat'[1...,1..`nexexog']						//  row vector
-		qui predict double `uhat' if `touse', resid
-
-		* RF estimations
-		* Accumulate pi_z matrix and list of RF residuals Vhat
-		mata: `pi_z' = J(`nexexog',0,.)
-		foreach var of varlist `sendo' {
-			tempvar vhat_`var'
-			qui reg `var' `exexog' if `touse' `wtexp', nocons
-			qui predict double `vhat_`var'' if `touse', resid
-			local Vhat "`Vhat' `vhat_`var''"
-			mata: `bhat' = st_matrix("e(b)")
-			mata: `bhat' = `bhat'[| 1,1 \ .,`nexexog' |]
-			mata: `bhat' = `bhat''
-			mata: `pi_z' = `pi_z' , `bhat'
-		}
-		
-		cap avar (`uhat' `Vhat') (`exexog') if `touse' `wtexp', `vceopt' nocons 
-		// note that avar(\sqrt{N}(\hat{\delta}-\hat{\pi}*\beta)) is the same as
-		// Z'Z^-1*Cov(Z'U-Z'V*\beta) and Cov(z*u-z*v'*\beta) is a linear combination 
-		// Var(zu) and Var(zv') and Cov(zu,\vec{zv'}) 
-		// where Var(zv') and \vec{zv'} are the Kronecker product
-		if _rc>0 {
-			di as err "error - internal call to avar failed"
-			exit _rc
-		}
-		
-		mata: `S'=st_matrix("r(S)")
-		mata: `S11'=`S'[| 1,1 \ `nexexog',`nexexog' |]
-		mata: `S12'=`S'[| `nexexog'+1,1 \ rows(`S'),`nexexog' |]
-		mata: `S22'=`S'[| `nexexog'+1, `nexexog'+1 \ rows(`S'),cols(`S') |]
-
-		qui mat accum `zz' = `exexog' if `touse' `wtexp', nocons
-		mata: `zz'=st_matrix("`zz'")
-		mata: `zzinv'=invsym(`zz')
-		tempname aux1 aux2
-		mata: `var_del' = `N' * makesymmetric(`zzinv'*`S11'*`zzinv') 
-		mata: `var_del'=`var_del'[| 1,1 \ `nexexog',`nexexog' |]
-		// Kronecker structure
-		mata: `var_pi_z' = `N' * makesymmetric(I(`nendog')#`zzinv'*`S22'*I(`nendog')#`zzinv') 
-		mata: `var_pidel_z' = `N' * I(`nendog')#`zzinv'*`S12'*`zzinv' 
-		mata: st_matrix("r(`pi_z')",`pi_z')
-		mata: st_matrix("r(`var_del')",`var_del')
-		mata: st_matrix("r(`var_pi_z')",`var_pi_z')
-		mata: st_matrix("r(`var_pidel_z')",`var_pidel_z')
-		mata: st_matrix("r(`zzinv')",`zzinv')
-		mat `zzinv' = r(`zzinv')
-		mat `pi_z'=r(`pi_z')
-		mat `var_del'=r(`var_del')
-		mat `var_pi_z'=r(`var_pi_z')
-		mat `var_pidel_z'=r(`var_pidel_z')
-
-		mata: mata drop `zz' `zzinv' `S' `S11' `S12' `S22' `bhat'			// clean up Mata memory
-		mata: mata drop `var_del' `var_pi_z'
-		mata: mata drop `pi_z' `var_pidel_z'
+		mat `del_z'			= r(del_z)
+		mat `var_pi_z'		= r(var_pi_z)
+		mat `pi_z'			= r(pi_z)
+		mat `var_del'		= r(var_del)
+		mat `var_pidel_z'	= r(var_pidel_z)
 
 	}
 		
 	if "`gmm2s'"~="" {														//  2-step GMM estimation
 	// 2-step MD estimation
 		mata: s_gmm2s_beta(							///
+								`nobs',			///
 								`nexexog',		/// number of instruments
 								"`sbeta'",		/// initial inefficient 1st-step sbeta is provided
 								"`del_z'",		/// row vector
 								"`var_del'",		///
 								"`pi_z'",		///
 								"`var_pi_z'",		///
-								"`var_pidel_z'"		///
+								"`var_pidel_z'",	///
+								0		/// turn off flag for calculating VCV
 						)
 		mat `sbeta'			= r(beta)
 		mat `sbeta'			= `sbeta''										//  row vector (Stata convention)
@@ -7102,14 +7205,9 @@ program get_strong_beta, rclass
 	}	// end calc of strong 2-step GMM beta
 
 	
-	if "`cue'"~="" {														//  CUE estimation
-																			//  note 1st-step sbeta is provided
-
-		//local avarcmd	"avar (`ehat') (`exexog') if `touse' `wtexp', `vceopt' nocons"
-		local avarcmd	"avar (`y0' `sendo') (`exexog') if `touse' `wtexp', `vceopt' nocons"
-		tempvar cuewvar
-		qui gen double `cuewvar' = `wf'*`wvar' if `touse'
-
+	if "`cue'"~="" {							//  CUE estimation
+										//  note 1st-step sbeta is provide
+dis "changed s_cue_beta to MD version"
 		mata: s_cue_beta(							///
 								`nobs',				///
 								`nexexog',		/// number of instruments
@@ -7137,13 +7235,15 @@ end			//  end get_strong_beta
 version 11.2
 mata:
 void s_gmm2s_beta(										///
+						scalar N,						///
 						scalar nexexog,						///
 						string scalar sbeta_name,		///
 						string scalar del_z_name,			/// row vector
 						string scalar var_del_name,			///
 						string scalar pi_z_name,			///
 						string scalar var_pi_z_name,		///
-						string scalar var_pidel_z_name		///
+						string scalar var_pidel_z_name,		///
+						scalar calcvarflag		///
 				)
 {
 
@@ -7157,7 +7257,7 @@ void s_gmm2s_beta(										///
 	var_pidel_z		=st_matrix(var_pidel_z_name)
 	
 	// MD version
-	
+
 	kron		= (iv_sbeta'#I(nexexog))
 	psi		= var_del - kron' * var_pidel_z - (kron' * var_pidel_z)' + kron' * var_pi_z* kron
 	_makesymmetric(psi)
@@ -7168,6 +7268,19 @@ void s_gmm2s_beta(										///
 	if (beta[1,1]==.) {
 		beta	= qrsolve(aux1, aux2)
 		npd = 1
+	}
+	if (calcvarflag) { // calculating VCV
+		aux3 = pi_z'*psi
+		aux4 = cholsolve(aux1, aux3)
+		if (aux4[1,1]==.) {
+			aux4 = qrsolve(aux1,aux3)
+			npd = 1
+		}
+		kron2s = (beta#I(nexexog)) // at estimated beta
+		psi2s  = var_del - kron2s' * var_pidel_z - (kron2s' * var_pidel_z)' + kron2s' * var_pi_z* kron2s
+		var_beta = aux4*psi2s*aux4'
+		st_matrix("r(var_beta)",var_beta)
+
 	}
 	st_numscalar("r(npd)",npd)					//  npd flag is kept in Stata space
 	st_matrix("r(beta)",beta)
