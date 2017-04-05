@@ -661,29 +661,26 @@ di as err "Fixed-effects estimation requires data to be -xtset-"
 			*/
  		
 
-				computematrices_iid ,		///
-					cons(`cons')		/// cons=1 if constant in model (ivprobit/tobit)
+				computematrices_robust,		///
 					touse(`touse')		///
 					wtexp(`wtexp')		///
-					model(`model')		///
+					vceopt(`vceopt')	///
 					depvar(`depvar_t')	///
-					endo(`endo_t')		/// first weak, then strong
+					endo(`endo_t')		/// 
 					exexog(`exexog_t')	///
-					inexog("")		/// empty/partialled-out unless ivprobit/tobit
 					nendog(`nendog')	///
 					nexexog(`nexexog')	///
-					ntinexog(0)		/// #exogenous regressors included in tests
-					npartial(`npartial')	/// #inexog partialled-out
+					npartial(`npartial')	/// #inexog partialled-out (but not used in this program)
 					nobs(`N')		///
-					dofminus(`dofminus')	/// For iid FE case sigmas, adjustment for #groups needed
+					dofminus(`dofminus')	///
 					ssa(`ssa')		/// small-sample adjustment
-					lm(0)			
+					lm(0)
 
-				mat `var_pi_z'	=r(var_pi_z)	
-				mat `pi_z'		=r(pi_z)
-				mat `var_del'	=r(var_del)
-				mat `var_pidel_z' = J(`nendog'*`nexexog',`nexexog',0) // iid case covariance is zero
-				mat `del_z'		=r(del_z)
+				mat `del_z'		= r(del_z)
+				mat `var_pi_z'		= r(var_pi_z)
+				mat `pi_z'		= r(pi_z)
+				mat `var_del'		= r(var_del)
+				mat `var_pidel_z'	= r(var_pidel_z)
 				di as text "Obtaining LIML point estimates..."
 
 				mata: s_cue_beta(					///
@@ -704,7 +701,7 @@ di as err "Fixed-effects estimation requires data to be -xtset-"
 				computematrices_robust,		///
 					touse(`touse')		///
 					wtexp(`wtexp')		///
-					vceopt(`vceopt')	///
+					vceopt("")	///
 					depvar(`depvar_t')	///
 					endo(`endo_t')		/// 
 					exexog(`exexog_t')	///
@@ -772,7 +769,7 @@ di as err "Fixed-effects estimation requires data to be -xtset-"
 			mat `x1y'    = r(x1y)
 			mat `zy'     = r(zy)
 			mat `yy'     = r(yy)
-			
+
 	* Always need to use an iid method (IV), either for final strong beta or for initial value for non-iid strong beta
 		mat `wnullvector' = J(1,`nendog',0) // set to zero so iv_s_beta goes through
 		get_strong_beta,							///
@@ -788,10 +785,19 @@ di as err "Fixed-effects estimation requires data to be -xtset-"
 							x1y(`x1y')				///
 							x2y(`x1y')				///
 							zy(`zy')				///
-							yy(`yy')
+							yy(`yy')				///
+							depvar(`depvar_t')		///
+							wendo("")		/// now calculating 2sls estimates for all endo
+							sendo(`endo_t')		///
+							exexog(`exexog_t')		///
+							touse(`touse')			///
+							vceopt(`vceopt')		///
+							wtexp(`wtexp')			///
+							wvar(`wvar')			///
+							wf(`wf')
 
 		mat `sbeta'		= r(sbeta)
-		dis "2sls estimates are"	
+		dis "2sls estimates are!"	
 		mat list `sbeta'
 		// 2sls variance
 		tempname ee var_2slsbeta aux0 zzinv
@@ -927,7 +933,8 @@ di as err "error: number of weakly endogenous (`nwendog') doesn't match number o
 							x1y(`x1y')				///
 							x2y(`x2y')				///
 							zy(`zy')				///
-							yy(`yy')
+							yy(`yy')				///
+							
 dis "here"
 
 		mat `sbeta'		= r(sbeta)
@@ -3336,8 +3343,9 @@ di as err "error - misspecified weights"
 * `cluster' = "cluster( <varlist> )"
 * `clustvar' = "`clustvar1' `clustvar2'"
 	local iid = ("`s(robust)'`s(cluster)'`s(kernel)'"=="")
-	local vceopt "`s(robust)' `s(cluster)' bw(`s(bw)') kernel(`s(kernel)') `s(psd)'"
-
+	//local vceopt "`s(robust)' `s(cluster)' bw(`s(bw)') kernel(`s(kernel)') `s(psd)'"
+	local vceopt "robust" 
+	dis "always want to use robust avar for test statistics - only consider heteroskedasticity for now"
 * Assemble notes for table output
 	if `iid' {
 		local note1 "Tests assume i.i.d. errors."
@@ -6795,14 +6803,14 @@ timer_on(1)
 		wnullvector		=st_matrix(wnullvector_name)			//  row vector
 
 // Use to get LM stats in iid case
-		if (iid & lm) {
-			syy				=st_matrix(syy_name)					//  scalar
-			see				=st_matrix(see_name)					//  scalar
-			sxy				=st_matrix(sxy_name)					//  COLUMN VECTOR
-			sve				=st_matrix(sve_name)					//  COLUMN VECTOR
-			sxx				=st_matrix(sxx_name)					//  KxK matrix 
-			svv				=st_matrix(svv_name)					//  KxK matrix
-		}
+		//if (iid & lm) {
+		//	syy				=st_matrix(syy_name)					//  scalar
+		//	see				=st_matrix(see_name)					//  scalar
+		//	sxy				=st_matrix(sxy_name)					//  COLUMN VECTOR
+		//	sve				=st_matrix(sve_name)					//  COLUMN VECTOR
+		//	sxx				=st_matrix(sxx_name)					//  KxK matrix 
+		//	svv				=st_matrix(svv_name)					//  KxK matrix
+		// }
 // Change to column vectors
 		del_z			=del_z'
 		del_v			=del_v'
@@ -6811,22 +6819,22 @@ timer_on(1)
 
 		r = del_z - pi_z*nullvector
 // Assemble psi
-		if (iid) {
-			kron		= (del_v - nullvector)#I(nexexog)
-			psi			= var_del + kron' * var_pi_z * kron
-			_makesymmetric(psi)
-			psi_inv		= invsym(psi)
-			bracket		= var_pi_z*kron
-			shat		= var_pi_z - bracket*psi_inv*bracket'
-		}
-		else {
+		//if (iid) {
+		//	kron		= (del_v - nullvector)#I(nexexog)
+		//	psi			= var_del + kron' * var_pi_z * kron
+		//	_makesymmetric(psi)
+		//	psi_inv		= invsym(psi)
+		//	bracket		= var_pi_z*kron
+		//	shat		= var_pi_z - bracket*psi_inv*bracket'
+		// }
+		//else {
 			kron		= (nullvector#I(nexexog))
 			psi			= var_del - kron'*var_pidel_z - (kron'*var_pidel_z)' + kron' * var_pi_z * kron
 			_makesymmetric(psi)
 			psi_inv		= invsym(psi)
 			bracket		= var_pidel_z - var_pi_z*kron
 			shat		= var_pi_z - bracket*psi_inv*bracket'
-		}
+		// }
 		_makesymmetric(shat)
 
 		aux1 = cholsolve(psi,r)
@@ -6839,14 +6847,14 @@ timer_on(1)
 		ar_chi2 = r' * aux1  	
 		st_numscalar("r(ar_chi2)", ar_chi2[1,1])
 		if (strpos(gridcols, " k_p")|strpos(gridcols, "j_p")|strpos(gridcols, "lc")) {			
-			if (iid) {								//  iid
-				aux0 = psi_inv * r * (del_v - nullvector)'
-				vec_pi_beta = -vec(pi_z) + var_pi_z*vec(aux0)
-			}
-			else {									//  robust
+			//if (iid) {								//  iid
+			//	aux0 = psi_inv * r * (del_v - nullvector)'
+			//	vec_pi_beta = -vec(pi_z) + var_pi_z*vec(aux0)
+			//}
+			//else {									//  robust
 				aux0 = var_pidel_z - var_pi_z*kron
 				vec_pi_beta = -vec(pi_z) + aux0*psi_inv*r
-			}
+			// }
 
 						
 
@@ -7030,8 +7038,48 @@ program get_strong_beta, rclass
 
 	tempname S npd
 	tempvar y0 ehat
-dis "iv `iv' gmm2s `gmm2s' liml `liml' cue `cue'"	
+dis "iv `iv' gmm2s `gmm2s' liml `liml' cue `cue'"
+local varflag 1
+	if "`varflag'"~="1" {
 
+		tempname pi_z bhat uhat  del_z var_pi_z var_del var_pidel_z // take out zz and zzinv tempname because program syntax specifies
+		tempname S S11 S12 S22
+		
+		qui gen double `y0' = `depvar' if `touse'			//  calc y0 = y at hypoth null; also used by CUE
+		local i=1
+		if "`wendo'"~= "" { // if wendo == "", then using get_strong_beta for all endo
+			foreach var of varlist `wendo' {
+				qui replace `y0' = `y0' - `b0'[1,`i']*`var'
+				local ++i
+			}
+		}
+		local nexexog : word count `exexog'
+		local nendog : word count `sendo'
+		
+		computematrices_robust,						///
+			touse(`touse')							///
+			wtexp(`wtexp')							///
+			vceopt(`vceopt')						///
+			depvar(`y0')						///
+			endo(`sendo')		/// 
+			exexog(`exexog')						///
+			nendog(`nendog')						///
+			nexexog(`nexexog')						///
+			npartial(0)					/// #inexog partialled-out (but not used in this program)
+			nobs(`nobs')					///
+			dofminus(0)					///
+			ssa(1)								/// small-sample adjustment
+			lm(0)
+
+		mat `del_z'			= r(del_z)
+		mat `var_pi_z'		= r(var_pi_z)
+		mat `pi_z'			= r(pi_z)
+		mat `var_del'		= r(var_del)
+		mat `var_pidel_z'	= r(var_pidel_z)
+		
+		dis "also calculating variance"
+	
+	}
 *************** ONE-STEP ESTIMATORS: LIML, IV **********************
 	if "`iv'"~="" {
 		tempname sbeta
@@ -7049,7 +7097,7 @@ dis "iv `iv' gmm2s `gmm2s' liml `liml' cue `cue'"
 								"`iv_sbeta0'",		/// rowvector
 								"`pi2hat'"			/// matrix
 						)
-	
+
 		if `calcflag' {
 			tempname iv_sbeta0 pi2hat
 			mat `iv_sbeta0'			= r(iv_sbeta0)					//  col vector (Mata convention)
@@ -7066,6 +7114,36 @@ dis "iv `iv' gmm2s `gmm2s' liml `liml' cue `cue'"
 		return mat sbeta		= `sbeta'	
 		scalar `npd'			= r(npd)
 		return scalar npd	= `npd'
+		
+		if "`varflag'"~="1" & "`liml'`gmm2s'`cue'"=="" {
+
+			// also need to calculate variance for 2sls beta
+			mata: beta		=st_matrix(`sbeta')
+			mata: del_z			=st_matrix(`del_z')				//  row vector
+			mata: var_del			=st_matrix(`var_del')
+			mata: pi_z			=st_matrix(`pi_z')
+			mata: var_pi_z		=st_matrix(`var_pi_z')
+			mata: var_pidel_z		=st_matrix(`var_pidel_z')
+			mata: zz		= st_matrix(`zz')
+		dis "here"
+
+			mata: kron		= (beta'#I(`nexexog'))
+			mata: psi		= var_del - kron' * var_pidel_z - (kron' * var_pidel_z)' ///
+						+ kron' * var_pi_z* kron
+			mata: _makesymmetric(psi)
+			mata: aux1		= cholsolve(psi,zz)
+			mata: if (aux1[1,1]==.) {
+			mata: 	aux1 = qrsolve(psi,zzinv)
+			mata: 	st_numscalar("r(npd)",1)
+			mata: }
+			mata: aux2		= invsym(pi_z' * zz * pi_z)
+			mata: var_beta	= aux2 * pi_z * zzinv * aux1 * pi_z' * aux2
+			mata: printf("size of 2SLS VCV is %9.0g %9.0g",cols(var_beta),rows(var_beta))
+			mata: printf("2SLS is %17.0g",beta[1,1])
+			mata: printf("variance is %17.0g",var_beta[1,1])
+			mata: st_matrix("r(var_beta)", var_beta)
+			//end
+		}
 	}	//  end calc of strong IV beta
 * All LIML, 2step and CUE need y0 = y - b0*x1 = y at hypoth null
 * and ehat = y0 - sbeta*x2 = resids from inefficient IV sbeta
@@ -7086,32 +7164,26 @@ dis "iv `iv' gmm2s `gmm2s' liml `liml' cue `cue'"
 	}
 	
 	if "`liml'"~="" { // changing to MD
-		computematrices_iid ,						///
-			cons(0)							/// cons=1 if constant in model (ivprobit/tobit)
+		computematrices_robust,						///
 			touse(`touse')							///
 			wtexp(`wtexp')							///
-			model("linear")							///
+			vceopt("")						/// for iid option in avar
 			depvar(`y0')						///
-			endo(`sendo')				/// first weak, then strong
+			endo(`sendo')		/// 
 			exexog(`exexog')						///
-			inexog("")						/// empty/partialled-out unless ivprobit/tobit
 			nendog(`nendog')						///
 			nexexog(`nexexog')						///
-			ntinexog(0)					/// #exogenous regressors included in tests
-			npartial(0)					/// #inexog partialled-out
-			nobs(`nobs')								///
-			dofminus(0)					/// For iid FE case sigmas, adjustment for #groups needed
+			npartial(0)					/// #inexog partialled-out (but not used in this program)
+			nobs(`nobs')					///
+			dofminus(0)					///
 			ssa(1)								/// small-sample adjustment
-			lm(0)								///
-			//llopt(`llopt')							/// ivtobit options
-			//ulopt(`ulopt')							///
-			//asis(`asis')							//  ivprobit options
+			lm(0)
 
-		mat `var_pi_z'	=r(var_pi_z)	
-		mat `pi_z'		=r(pi_z)
-		mat `var_del'	=r(var_del)
-		mat `var_pidel_z' = J(`nendog'*`nexexog',`nexexog',0) // iid case covariance is zero
-		mat `del_z'		=r(del_z)
+		mat `del_z'			= r(del_z)
+		mat `var_pi_z'		= r(var_pi_z)
+		mat `pi_z'			= r(pi_z)
+		mat `var_del'		= r(var_del)
+		mat `var_pidel_z'	= r(var_pidel_z)
 dis "use CUE-MD for LIML so also need sbeta"
 
 		mata: s_cue_beta(							///
@@ -7317,6 +7389,7 @@ void s_iv_beta(											///
 		QZX1		= st_matrix(ZX1_name)/N
 		QZX2		= st_matrix(ZX2_name)/N
 		QZy			= st_matrix(Zy_name)/N
+		printf("here %9.0g",rows(QZZ))
 
 		aux1		= cholsolve(QZZ, QZX2)
 		if (aux1[1,1]==.) {
