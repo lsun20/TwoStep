@@ -289,7 +289,7 @@ di as err "Internal weakiv error - preserve failed"
 	local note2			"`s(note2)'"
 	local note3			"`s(note3)'"
 	local iid			"`s(iid)'"
-display "waldcmd is `waldcmd'"
+display "waldcmd is `waldcmd'!!!"
 ************************* Prep for transformations **************************************
 
 * If TS or FV operators used, replace with temporary variables.
@@ -338,6 +338,7 @@ display "waldcmd is `waldcmd'"
 	clean_varlist `wtexp' if `touse', vlist(`exexog') vlist_t(`exexog_t') `noconstant'
 	local exexog_t	"`r(vlist_c_t)'"
 	local nexexog	=r(nvars_c)					//  update count
+dis "ninexog is `exexog'"
 
 * Process included exogenous
 	local templist
@@ -347,6 +348,7 @@ display "waldcmd is `waldcmd'"
 		local templist "`templist' `r(varlist)'"
 		}
 	local inexog_t : list clean templist		// new varlist exexog_t with tempvars
+
 * Now remove collinears and zeroed-out factor variables etc.
 	clean_varlist `wtexp' if `touse', vlist(`inexog') vlist_t(`inexog_t') `noconstant'
 	local inexog_t	"`r(vlist_c_t)'"
@@ -397,7 +399,7 @@ display "waldcmd is `waldcmd'"
 * For Wald tests and construction of stats and grids.
 * Extract #nendog subvector of coeffs and corresp submatrix of VCV:
 
-	local cnames		: colnames(e(b))							//  not colfullnames since ivtobit has eqn names we don't want
+	local cnames		: colnames(e(b))				//  not colfullnames since ivtobit has eqn names we don't want
 	local cnames		: subinstr local cnames "bn." ".", all		//  strip out base notation
 	local cnames		: subinstr local cnames "b." ".", all
 	local cnames		: subinstr local cnames "o." ".", all
@@ -616,6 +618,7 @@ di as err "Fixed-effects estimation requires data to be -xtset-"
 	tempname nullvec del_z pi_z var_del var_pidel_z var_pi_z bhat del_v
 	tempname S S11 S12 S22 zz zzinv x2z xx zx xy x1x1 x2x2 x1x2 zx1 zx2 zy x1y x2y yy
 	tempname sbeta iv_sbeta0 pi2hat ecuebeta wcuebeta var_ecuebeta var_wcuebeta var3 // for cuepoint
+	tempname var_2slsbeta // for MD estimators
 	tempname bhat pi_z1 pi_z2 var_pidel_z1 var_pidel_z2 var_pi_z11 var_pi_z12 var_pi_z22
 	tempname syy see sxx sxy sxe syv sve svv AA
 	tempname citable
@@ -630,41 +633,21 @@ di as err "Fixed-effects estimation requires data to be -xtset-"
 	// tabulate the 1-alpha quantile of chi2 with dg 1 for projection test (for each component)
 	local invchi2_1_df = invchi2(1, `k_level'/100)
 
-******************************** CUE point estimator if requested **************************
+******************************** CUE point estimator/MD estimator if requested **************************
 
-	if `cuepoint' {
+	if `cuepoint' | "`waldcmd'" == "liml" | "`waldcmd'" == "cue" {
 
 		if ~`overid' {								//  if exactly-ID, CUE=LIML=IV
 			mat `ecuebeta'	= `ebeta'
 			mat `wcuebeta'	= `wbeta'
 		}
 		else { // calculate LIML or CUE estimates
-			/*computecrossprods, touse(`touse') wtexp(`wtexp') exexog(`exexog_t') wendo(`endo_t') depvar(`depvar_t')
-			mat `zz'	= r(zz)
-			mat `xx'	= r(x1x1)
-			mat `zx'	= r(zx1)
-			mat `xy'	= r(x1y)
-			mat `zy'	= r(zy)
-			mat `yy'	= r(yy)
-			*/
-			if `iid' {
-			/*
-				mata: s_liml(							///
-									`N',				///
-									"`zz'",				///
-									"`xx'",				///
-									"`zx'",				///
-									"`xy'",				///
-									"`zy'",				///
-									"`yy'"				///
-								)
-			*/
- 		
 
+			if `iid' | "`waldcmd'" == "liml" {
 				computematrices_robust,		///
 					touse(`touse')		///
 					wtexp(`wtexp')		///
-					vceopt(`vceopt')	///
+					vceopt("")	///
 					depvar(`depvar_t')	///
 					endo(`endo_t')		/// 
 					exexog(`exexog_t')	///
@@ -697,11 +680,14 @@ di as err "Fixed-effects estimation requires data to be -xtset-"
 						)		
 			}
 			else {
+				if "`waldcmd'" == "cue" {
+					local vceopt "robust" // if requested CUE-MD estimator,then vce needs to be robust
+				}
 					
 				computematrices_robust,		///
 					touse(`touse')		///
 					wtexp(`wtexp')		///
-					vceopt("")	///
+					vceopt(`vceopt')	///
 					depvar(`depvar_t')	///
 					endo(`endo_t')		/// 
 					exexog(`exexog_t')	///
@@ -751,17 +737,21 @@ di as err "Fixed-effects estimation requires data to be -xtset-"
 			}
 			display "CUE VCV is for `wendo'"
 			matrix list `var_wcuebeta'
-				
-			// Replace previous estimates in Wald model (i.e. ivreg2)
-			mat `ebeta' = `ecuebeta'
-			mat `wbeta' = `wcuebeta'
-			mat `var_wbeta' = `var_wcuebeta'
+			
+			if "`waldcmd'" == "liml" | "`waldcmd'" == "cue" {	
+				// Replace previous estimator in Wald model (e.g. ivreg2) with MD estimator
+				mat `ebeta' = `ecuebeta'
+				mat `wbeta' = `wcuebeta'
+				mat `var_wbeta' = `var_wcuebeta'
+			}
 		
 		}	// end CUE (overid) block
 
 	}
-	else if `forcerobust' != 1&"`robust'" == "" {
+	//else if `forcerobust' != 1&"`robust'" == "" {
+	else if "`waldcmd'" == "2sls" {
 		di as text "Obtaining 2SLS point estimates..."
+		di as text "point estimates should be identical to Wald, but VCE may be different (because we use robust formula)"
 		computecrossprods, touse(`touse') wtexp(`wtexp') exexog(`exexog_t') wendo(`endo_t') depvar(`depvar_t')
 			mat `zz'     = r(zz)
 			mat `x1x1'   = r(x1x1)
@@ -771,6 +761,7 @@ di as err "Fixed-effects estimation requires data to be -xtset-"
 			mat `yy'     = r(yy)
 
 	* Always need to use an iid method (IV), either for final strong beta or for initial value for non-iid strong beta
+	* IS THIS STATEMENT STILL TRUE?
 		mat `wnullvector' = J(1,`nendog',0) // set to zero so iv_s_beta goes through
 		get_strong_beta,							///
 							iv				///  IV
@@ -791,15 +782,20 @@ di as err "Fixed-effects estimation requires data to be -xtset-"
 							sendo(`endo_t')		///
 							exexog(`exexog_t')		///
 							touse(`touse')			///
-							vceopt(`vceopt')		///
+							vceopt(`vceopt')		/// doesn't quite matter because of s_iv_beta doesn't need this
 							wtexp(`wtexp')			///
 							wvar(`wvar')			///
 							wf(`wf')
 
 		mat `sbeta'		= r(sbeta)
+		mat `var_2slsbeta'      = r(var_beta)
 		dis "2sls estimates are!"	
 		mat list `sbeta'
+		mat list `var_2slsbeta'
+		// Replace previous estimator in Wald model (e.g. ivreg2) with MD 2SLS estimator - just the variance is different
+				mat `var_wbeta' = `var_2slsbeta'
 		// 2sls variance
+		/* below would be the same as ivreg2 nonrobust
 		tempname ee var_2slsbeta aux0 zzinv
 		tempvar ehat
 		qui gen double `ehat' = `depvar_t' if `touse'	
@@ -812,7 +808,8 @@ di as err "Fixed-effects estimation requires data to be -xtset-"
 		mat `zzinv' = invsym(`zz')
 		mat `aux0' = `zx1''*`zzinv'*`zx1'
 		mat `var_2slsbeta' = `ee'*invsym(`aux0')/(`N'-`dofminus')*`ssa'
-		mat list `var_2slsbeta'
+		*/
+		
 	} 
 	else if `forcerobust' == 1|"`robust'" == "robust" {
 		computematrices_robust,		///
@@ -1009,7 +1006,7 @@ dis "here"
 							)
 
 	}												//  end subset-AR code
-	else if `iid' & ~`forcerobust' {			//  iid-based test formulae
+	/*else if `iid' & ~`forcerobust' {			//  iid-based test formulae
 
 		computematrices_iid ,						///
 			cons(`cons')							/// cons=1 if constant in model (ivprobit/tobit)
@@ -1045,7 +1042,7 @@ dis "here"
 		mat `sxx'		=r(sxx)
 		mat `svv'		=r(svv)
 
-	}																//  end iid code
+	}*/	// DONT WANT TO CALCULATE IID TESTS															//  end iid code
 	else {															//  robust/non-iid case
 
 *** inexog and cons partialled out everywhere ***
@@ -2502,7 +2499,7 @@ program define display_output
 
 end
 
-program define estimate_model
+program define estimate_model, eclass
 	version 11.2
 			syntax anything(everything) [if] [in] [fw aw pw iw] [,		///
 			null(numlist) kwt(real 0) NOCI								/// weakiv options stripped out...
@@ -2559,13 +2556,20 @@ program define estimate_model
 	tokenize `"`anything'"'											//  need quotes since main command could include commas,
 																	//  e.g., in lag ranges such as l(1,2).abmi
 	local cmd `1'
+* Verify estimation command: only these are allowed/parsed
 	local legalcmd	"ivregress ivreg2 ivreg2h xtivreg xtivreg2 ivprobit ivtobit xtabond2"
-	local legal		: list cmd in legalcmd
-	if `legal' {
+* Verify estimator if no command is specified
+	local legalestimator "2sls liml md cue"
+	local legal_cmd		: list cmd in legalcmd
+	local legal_estimator   : list cmd in legalestimator
+	if `legal_cmd' {
 		di as text "Estimating model for Wald tests using `cmd'..."
 	}
+	else if `legal_estimator' {
+		di as text "Estimating model using `cmd' estimator (MD approach)..."
+	}
 	else {
-di as err "error - unsupported estimator `estimator'"
+di as err "error - unsupported estimator `cmd'"
 		error 301
 	}
 
@@ -2580,7 +2584,15 @@ di as err "error - unsupported estimator `estimator'"
 	if "`cmd'" == "ivreg2" {											//  exploit ivreg2 nooutput option; means
  																		//  warning messages will be reported
 		local optexp	: subinstr local optexp "nooutput" ""			//  remove it in case it's already there
+		dis "`anything' what is the command"
 		`anything' `if' `in' `wtexp' `optexp' nooutput					//  and now force use
+	}
+	else if `legal_estimator' {
+		local anything = subinword("`anything'","`cmd'","ivreg2",1) // still need to use ivreg2 for parsing and initial beta
+		local optexp	: subinstr local optexp "nooutput" ""			//  remove it in case it's already there
+		dis "`anything' what is the command"
+		`anything' `if' `in' `wtexp' `optexp' nooutput					//  and now force use
+		ereturn local cmd "`cmd'" // manually overwrite/pass on the cmd for get_model_specs
 	}
 	else if "`cmd'" == "xtivreg2" & ("`vernum'" >= "01.0.14") {			//  xtivreg2 ver 01.0.14 or greater
 		local optexp	: subinstr local optexp "nooutput" ""			//  also supports nooutput option
@@ -2594,10 +2606,10 @@ di as err "error - unsupported estimator `estimator'"
 		local optexp	: subinstr local optexp "nooutput" ""
 		qui `anything' `if' `in' `wtexp' `optexp' gen(, replace)		//  ivreg2h requires generated IVs to be left behind
 	}
-	else if "`cmd'" ~= "xtabond2" {										//  all other estimation commands except xtabond2
-		qui `anything' `if' `in' `wtexp' `optexp'						//  more informative error messages with qui than cap
+	else if "`cmd'" ~= "xtabond2" {			//  all other estimation commands except xtabond2 
+		qui `anything' `if' `in' `wtexp' `optexp'			//  more informative error messages with qui than cap
 	}
-	else {																//  xtabond2 requires special treatment
+	else if "`cmd'" == "xtabond2" {						//  xtabond2 requires special treatment
 
 		if c(matafavor)~="speed" {
 di as err "error - weakiv support for xtabond2 requires matafavor to be set for speed"
@@ -2619,7 +2631,7 @@ di as err "to diagnose, try estimating by `cmd' and then use weakiv as a postest
 
 	}	// end xtabond2 specials
 
-end
+end // end of estimate_model
 
 program define get_option_specs, rclass
 	version 11.2
@@ -3211,10 +3223,19 @@ program define get_model_specs, sclass
 
 * verify estimation model: test can only run after ivregress, ivreg2, ivreg2h, xtivreg2, ivtobit, and ivprobit
 	local legalcmd	"ivregress ivreg2 ivreg2h xtivreg xtivreg2 ivprobit ivtobit xtabond2"
+* Verify estimator if no command is specified
+	local legalestimator "2sls liml md cue"
 	local cmd		"`e(cmd)'"
-	local legal		: list cmd in legalcmd
-	if ~`legal' {
-di as err "weakiv not supported for command `e(cmd)'"
+	local legal_cmd		: list cmd in legalcmd
+	local legal_estimator   : list cmd in legalestimator
+	if `legal_cmd' {
+		di as text "Parsing model for `cmd'..."
+	}
+	else if `legal_estimator' {
+		di as text "Parsing model for calculating `cmd' estimator..."
+	}
+	else {
+di as err "error - unsupported for command `e(cmd)'"
 		error 301
 	}
 
@@ -3225,7 +3246,7 @@ di as err "weakiv not supported for command `e(cmd)'"
 * Need to pass `wvar' so that values saved by xtabond2 in e(wt) can be assigned to it
 		parse_xtabond2, wvar(`wvar') esample(`esample') touse(`touse') strong(`strong') subset(`subset') testexog(`testexog') clustvar1_t(`clustvar1_t') eq(`eqxtabond2')
 	}
-	if "`e(cmd)'"=="ivreg2" | "`e(cmd)'"=="ivreg2h" {
+	if "`e(cmd)'"=="ivreg2" | "`e(cmd)'"=="ivreg2h" | `legal_estimator' { // syntax for manually calculate estimator is closest to ivreg2
 		parse_ivreg2, touse(`touse') strong(`strong') subset(`subset') testexog(`testexog') clustvar1_t(`clustvar1_t') clustvar2_t(`clustvar2_t')
 	}
 	if "`e(cmd)'"=="ivregress" {
@@ -3295,6 +3316,7 @@ di as err "syntax error - variable listed in project(.) but not in weakly endoge
 	local nexexog	: word count `s(exexog_t)'		// xtabond2 does not have an exexog list since all IVs are temp vars
 	local ninexog	: word count `s(inexog)'
 	local ntinexog	: word count `s(tinexog)'
+dis "nendog is `nendog'"
 
 * Count modified to include constant if appropriate
 	local ninexog	= `ninexog' + `s(cons)'
@@ -5290,8 +5312,8 @@ program define get_gridlist, rclass
 		if `points'>1 {
 			local gridinterval = .999999999*(`gridmax'-`gridmin')/(`points'-1)
 			local grid "`gridmin'(`gridinterval')`gridmax'"						//  grid is in numlist form
-			if `usecue' & `numlimits'==2										/// add CUE to grid
-				& `wbeta'>`gridmin' & `wbeta'<`gridmax' {						//  ...but only if an interior point
+			if `usecue' & `numlimits'==2	{									/// add CUE to grid
+				//& `wbeta'>`gridmin' & `wbeta'<`gridmax' { //always add CUE point //  ...but only if an interior point
 				local grid		"`grid' `wbeta'"								//  wbeta is CUE beta
 				local points	=`points'+1										//  and add 1 to points
 			}
@@ -6491,12 +6513,22 @@ real matrix collapse_pcitable(									///
 {
 	
 	gridcols		=strtoreal(tokens(colsvec))
+printf("point has row %9.0g",rows((*p)))
 
 	smat1			= rowsum((*p)[.,2..cols(*p)])
-	smat2			= smat1[(2::rows(smat1)),1]
-	smat1			= smat1[(1::rows(smat1)-1),1]
-	smat			= (smat1-smat2) :~= 0
-	smat			= (1 \ smat) :| (smat \ 1)
+printf("smat1 has row %9.0g",rows(smat1)) // if only one grid point, then need toskip 
+	if (rows(smat1)>1) {
+		smat2			= smat1[(2::rows(smat1)),1]
+		smat1			= smat1[(1::rows(smat1)-1),1]
+		smat			= (smat1-smat2) :~= 0
+		smat			= (1 \ smat) :| (smat \ 1)
+	} 
+	else {
+		smat2			= smat1[1::rows(smat1),1]
+		smat			= smat2 :~= 1
+	}	
+printf("snat has row %9.0g",smat[1,1])
+
 	return(select((*p),smat))
 
 }
@@ -6537,11 +6569,13 @@ program get_ci_from_table, rclass
 			local testcol		: list posof "`test'_r" in cnames	//  table has rejections, hence "_r"
 		 	local gridcols		"`gridcols' `testcol'"
 		}
+		dis "hasrejections gridcols is `gridcols'"
 		mata: `rtable' = collapse_pcitable(`p', "`gridcols'")		//  create table of rejections and collapse (delete unneeded rows)
 
 		mata: st_matrix("`rtable'",`rtable')						//  copy from Mata into Stata
 		mat colnames `rtable'	=`rtcnames'							//  and name columns
-		mata: mata drop `rtable'									//  don't need Mata version of rejections table
+		mata: mata drop `rtable'
+		mat list `rtable'									//  don't need Mata version of rejections table
 	}
 	else {
 		//  original CI table with p-values besides lc_2sls, so need to calc rejections
@@ -6830,6 +6864,8 @@ timer_on(1)
 		//else {
 			kron		= (nullvector#I(nexexog))
 			psi			= var_del - kron'*var_pidel_z - (kron'*var_pidel_z)' + kron' * var_pi_z * kron
+					printf("here")
+
 			_makesymmetric(psi)
 			psi_inv		= invsym(psi)
 			bracket		= var_pidel_z - var_pi_z*kron
@@ -7040,10 +7076,10 @@ program get_strong_beta, rclass
 	tempvar y0 ehat
 dis "iv `iv' gmm2s `gmm2s' liml `liml' cue `cue'"
 local varflag 1
-	if "`varflag'"~="1" {
+	if "`varflag'"=="1" {
 
 		tempname pi_z bhat uhat  del_z var_pi_z var_del var_pidel_z // take out zz and zzinv tempname because program syntax specifies
-		tempname S S11 S12 S22
+		tempname S S11 S12 S22 var_beta
 		
 		qui gen double `y0' = `depvar' if `touse'			//  calc y0 = y at hypoth null; also used by CUE
 		local i=1
@@ -7110,38 +7146,35 @@ local varflag 1
 		mat `sbeta'				= r(beta)							//  col vector (Mata convention)
 		dis "initial sbeta"						//  strong IV beta at specified null
 		mat list `sbeta'
-		mat `sbeta'				= `sbeta''							//  row vector (Stata convention)
+		mat `sbeta'				= `sbeta''	//  row vector (Stata convention)
 		return mat sbeta		= `sbeta'	
 		scalar `npd'			= r(npd)
 		return scalar npd	= `npd'
 		
-		if "`varflag'"~="1" & "`liml'`gmm2s'`cue'"=="" {
-
+		if "`varflag'"=="1" & "`liml'`gmm2s'`cue'"=="" {
+		dis "hi"
 			// also need to calculate variance for 2sls beta
-			mata: beta		=st_matrix(`sbeta')
-			mata: del_z			=st_matrix(`del_z')				//  row vector
-			mata: var_del			=st_matrix(`var_del')
-			mata: pi_z			=st_matrix(`pi_z')
-			mata: var_pi_z		=st_matrix(`var_pi_z')
-			mata: var_pidel_z		=st_matrix(`var_pidel_z')
-			mata: zz		= st_matrix(`zz')
-		dis "here"
+			mata: beta		=st_matrix("r(beta)")
+			mata: del_z		=st_matrix("r(del_z)")				//  row vector
+			mata: var_del		=st_matrix("r(var_del)")
+			mata: pi_z		=st_matrix("r(pi_z)")
+			mata: var_pi_z		=st_matrix("r(var_pi_z)")
+			mata: var_pidel_z	=st_matrix("r(var_pidel_z)")
+			mata: zz		= st_matrix("`zz'")
 
 			mata: kron		= (beta'#I(`nexexog'))
 			mata: psi		= var_del - kron' * var_pidel_z - (kron' * var_pidel_z)' ///
 						+ kron' * var_pi_z* kron
 			mata: _makesymmetric(psi)
-			mata: aux1		= cholsolve(psi,zz)
-			mata: if (aux1[1,1]==.) {
-			mata: 	aux1 = qrsolve(psi,zzinv)
-			mata: 	st_numscalar("r(npd)",1)
-			mata: }
+			mata: aux1		= psi * zz
 			mata: aux2		= invsym(pi_z' * zz * pi_z)
-			mata: var_beta	= aux2 * pi_z * zzinv * aux1 * pi_z' * aux2
+			mata: var_beta	= aux2 * pi_z' * zz * aux1 * pi_z * aux2
 			mata: printf("size of 2SLS VCV is %9.0g %9.0g",cols(var_beta),rows(var_beta))
 			mata: printf("2SLS is %17.0g",beta[1,1])
 			mata: printf("variance is %17.0g",var_beta[1,1])
 			mata: st_matrix("r(var_beta)", var_beta)
+		mat `var_beta'				= r(var_beta)
+		return mat var_beta			= `var_beta'
 			//end
 		}
 	}	//  end calc of strong IV beta
@@ -7605,6 +7638,8 @@ printf("here")
 	optimize_init_trace_value(S, traceonoff)		//  turn on/off iteration msg with obj function value
 // CUE objective function takes extra arguments:
 	optimize_init_argument(S, 1, cuestruct)
+// Change maximum iterations
+	//optimize_init_conv_maxiter(S, 10000)
 
 	beta = optimize(S)								//  row vector
 	beta = beta'									//  col vector
