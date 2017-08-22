@@ -1,142 +1,9 @@
-*! twostepweakiv 2.4.07 1Oct2015
-*! authors Finlay-Magnusson-Schaffer
-*! addition: TwoStep Robust CS for Linear IV Sep2016 
+*! twostepweakiv 1.0.01 01Aug2017
+*! authors Sun
 * Usage:
-* <eqn>, <options>         = estimate equation as model=linear/ivprobit/ivtobit.
-* <nothing>, <options>     = uses model estimated by ivregress/ivreg2/etc. in memory
-*                            if no such model in memory, works as Stata replay and
-*                            replays last weakiv estimates. useful for graph tweaking.
-* <nothing>, estusewald(*) = same as above but uses stored model
-* <nothing>, version       = reports version number, does nothing else
-
+* <eqn>, <options>         = estimate equation as model=linear
 * Version notes:
-* 1.0.01	31Jul2013.	First complete working version
-* 1.0.02	04Aug2013.	Bug fix in kwt (was ignoring option)
-* 1.0.03	05Aug2013.	Renamed weakiv with modified syntax. Minor program restructuring.
-* 1.0.04	07Aug2013.	J cset reported. Open-ended and entire-grid csets noted in output.
-*						Hyperlinks in output table added; link to sections of help file.
-*						"all" option added for graph(.).
-* 1.0.05	11Aug2013.	Added support for ivreg2h (Lewbel-type generated IVs).
-*						Fixed bug in combination of replay() and graph(all).
-* 1.0.06	22Sep2013.	Major update.  Added support for 2-endog-regressor case.
-*						Graphing for K=2 case requires Stata 12 (contour) and -surface-.
-*						Switch from use of ranktest to use of avar.
-*						level option for graphing now allows multiple levels;
-*						  with replay can change level vs. estimation table.
-*						Various coding reorganizations, fixes and tidying up.
-*						Bug fix for iid closed-form CIs when only included exog is constant.
-*						Minor bug fix for CLR - numerical precision issues mean it can be
-*						  very small and <0, so now take abs(.)
-* 1.0.07	11Nov2013.	Minor bug fix for K=2 (would crash in grid search if exactly IDed)
-* 1.0.08	15Jan2014.  Added support for FE and FD estimation by xtivreg2 and xtivreg.
-*                       Included recoding for temporary variables to support TS operators.
-*                       Added number of observations to table output.
-*                       Added contourline (default) and contourshade to contour options
-*                       Added kjlevel(.), arlevel(.), jlevel(.) options.
-*                       Saved level macros now level and levellist (if >1 specified)
-*                       Behavior of level(.) option is now that first (not highest) is used for tests.
-*                       Added check for Stata-legal confidence levels (>=10, <=99.99)
-*                       Save cluster numbers and variables as e(.) macros
-*                       Add support for Kleibergen LM method, both iid and non-iid cases.  Implies partialling-out.
-*                       NB: Kleibergen non-iid formulae do not reduce to iid formula when iid covariances used.
-*                       Fixed bug in closed-form CIs with dofminus
-* 1.0.09	16Feb2014	Fixed bug in user-set levels for J and AR tests.
-*						Fixed display of excessive precision for kwt.
-* 1.0.10	23Mar2014	Added strong(.) option.  Various code tweaks.
-*						Fixed minor contouronly/surfaceonly bug (ignored in interactive mode)
-* 1.0.11    23May2014   Fixed contourshade bugs; can now control starting/ending color.
-*                       Fixed minor contourlevel bugs (was ignoring additional specified levels)
-* 2.0.00    26Jun2014   Major internal rewrite to accommodate xtabond2 and aribtrary number of endogenous vars.
-*                       Changes include: always preserve/restore; always partial-out in linear models;
-*                       support for factor variables; use of sclass programs for parsing;
-*                       promoted to requiring Stata 11.2 (because of _rmcollright bug under version control v=10.1);
-*                       tests reported for arbitrary number of weakly and strongly identified coeffs;
-*                       CIs and graphs available for #weak=1 and #weak=2 and arbitrary number of strongly IDed;
-*                       specification of null options changed to single numlist;
-*                       misc minor changes to saved results
-* 2.0.01	28Jun2014   Fix in xtabond2 parsing code to catch whether data in levels, diffs or both are used.
-*                       xtabond2 parsing catches whether there are zero endogenous regressors.
-*                       Fixed bug in npd flag not being set to 1 if npd matrix encountered in test of specific null.
-*                       Fixed bug in use of marksample.
-* 2.0.02	30Jun2014   Bug fixes: levels vs. diffs data with xtabond2; whether xtabond2 has K>0; output formatting;
-*                       saved matrices to enable xtabond2 to work as postestimation command.
-*                       Report various ob and var counts with xtabond2.  Report list of strongly identified.
-*                       Added EQxtabond2(.) option to override default of diff/level/sys data.
-*                       Added md option. Default method now LM for linear models, MD for others.
-* 2.0.03	4July2014   Errors in pre-weakiv estimation command now capture-d rather than quietly-ed.
-*                       Stata's built-in _rmcollright provided with Stata 12.1 (version 1.3.0  07apr2009) has
-*                       a bug that doesn't allow it to accept weights, so replaced it with weakiv_rmcollright
-*                       that has same functionality but with bug fixed.
-*                       Mikusheva-Poi CLR code revised to assuming partialling-out.
-*                       Fixed bug that arose if the weighting variable was also a regressor.
-*                       Added support for xtabond2 with weights and with classical VCE.
-*                       Added support for xtabond2 with non-panel-id clustering variable (version forthcoming)
-* 2.0.04	5July2014   Fixed bug in reported names of endog/inexog regressors with xtabond2 and eq(.) option meant
-*                       subset of data (just diff or lev out of total sys estimation) used.
-* 2.0.05	5July2014   Caught minor bug where weakiv would crash with xtabond2 if #endog=0
-* 2.0.06	17July2014  Catch and warn if graphs requested when #endog>2. Added g_min, g_max, g_avg macros.
-*                       Recoded CI table in Mata to avoid Stata max matsize limit.  Total #points in output.
-* 2.1.00    28July2014  Rewrite of code to allow grid searches in arbitrary number of dimensions.
-*                       Rewrite of code to report projection-based inference
-*                       Changes of options: gridpoints, gridlist, gridmin, gridmax
-*                       Macro name change to grid_desc; new macro added points_desc
-*                       Fixed bug in column order of stored nulls
-*                       Fixed bug in reporting of CIs if interval started on last gridpoint
-* 2.2.00    5Aug2014    Added subset AR test.  Added projection-based inference.  More code rewrites.
-*                       Added cuestrong option for LIML and CUE estimation for strongly-IDed coeffs.
-*                       Fixed bug in CIs with LM option - was using MD.  Strongly-IDed coeffs now saved in citable.
-* 2.2.01    7Aug2014    Added scatter option for 2-way CI sets.  Added 2-way projection inference option.
-*                       Projection-based CIs saved as e(.) matrices.
-* 2.3.00    11Aug2014   rk statistic (K-P rank test) now always available.  CLR stat now always available.
-*                       Added p-values for rk statistic.
-*                       p-values for CLR stat available through simulation.
-*                       Fixed bug in replay with project(.)
-*                       Rationalized code (single routine for computing tests).
-*                       Contourshade now default for 2-D graphs.
-* 2.3.01    21Aug2014   Added testexog(.) option for including exogenous regressors in tests
-* 2.3.02    24Aug2014   Fixed bug: 2-way graphs were leaving behind temporary variable
-*                       Added testid option to report tests of underidentification
-* 2.3.03    9Sept2014   Added cuepoint option for reporting CUE point estimates
-*                       Added CUE-MD method for CUE with Wald/MD tests
-* 2.3.04    12Sept2014  Fixed bug where project2(.) didn't trigger grid construction
-*                       cuepoint option triggers centering of grid on CUE rather than original Wald estimator
-*                       Allow spec with one gridpoint in a dimension
-*                       (NB: first public release of version 2)
-* 2.3.05    2Oct2014    Fixed bug in reporting of #exexog with xtabond2 - was reporting 0
-*                       Added saved macro for #exexog
-* 2.4.00    1Jan2015    Fixed bug in unsaved macro with list of CI tests.
-*                       Changed replay to use saved macro list of tests.
-*                       Added Wald to list of projection-based tests.
-*                       Minor recoding to separate Wald CI code from CI code for rest of tests.
-*                       Rewrite of code for extracting CIs; rejection indicators no longer saved;
-*                       replay mode now triggers recalculation of CIs and rejection indicators.
-*                       Minor changes to names of saved matrices (betas and VCEs)
-*                       Rewrite of code for storing and working with CI tables; now only exist in Mata
-*                       until end of program, when stored as e(.) if #rows <= 32,767.
-*                       If citable is too large to start as e(citable),
-*                       split into separate e(.) matrices of 10k rows each.
-* 2.4.01    18Jan2015   Changed call to (xt)ivreg2 to use nooutput option so that warning messages are displayed.
-*                       Checks whether ivreg2h is called with panel-data option (not currently supported)
-* 2.4.02    9Feb2015    Fixed bug in gridlist option; was ignoring supplied list.
-*                       Changed cuepoint option so that it triggers inclusion of CUE beta in grid
-* 2.4.03    11Feb2015   Added support for updated xtabond2 - e(clustid) became e(clustid1)
-*                       Fixed bugs causing tokenize to choke if string had commas, e.g., "l(1,2).somevar"
-* 2.4.04    26Mar2015  	Added support for ivreg2 with factor variables; also general recoding of support
-*                       for factor vars using -fvstrip- utility.
-*                       Fixed bug in xtabond2 parsing code; now allows possibly-empty inexog list
-*                       Fixed small bug in xtabond2 - wasn't reporting correct number of clusters in rare cases
-*                       Fixed reporting of stats when encountering NPDs - negative stats are changed to missing
-* 2.4.05    15Jun2015   Update to internal utility fvstrip
-* 2.4.06    1July2015   Bug fix - projection intervals were not accepting non-integer K-J test level.
-*                       Code tweak - "capture drop __wt" changed to "capture drop __wt1"
-* 2.4.07    1Oct2015    Rewrite of code to parse xtabond2.
-* 2.4.08    16Feb2016   Bug fix - cuepoint option with exactly-IDed model was causing LIML code to crash.
-
-* to do: note possible upper limit to points that contour can render; use scatter option instead
-*        use mat colnames from saved matrices with xtabond2
-*        recommend using LIML or CUE with cuepoint so that automatic graph grid is centred correctly.
-*        fix bug that disallows using a string variable for the cluster option
-*        consider replacing cholesky(invsym(psi)) with rspi_inv = matpowersym(psi, -0.5)
+* 1.0.01	01Aug2017.	First complete working versionm largely based on Finlay-Magnusson-Schaffer's weakiv
 
 program define twostepweakiv, eclass byable(recall) sortpreserve
 	version 11.2
@@ -191,7 +58,7 @@ program define twostepweakiv, eclass byable(recall) sortpreserve
 * If data already preserved, OK; if preserve fails for other reasons, exit with error
 	capture preserve
 	if _rc > 0 & _rc~=621 {
-di as err "Internal weakiv error - preserve failed"
+di as err "Internal twostepweakiv error - preserve failed"
 		exit 498
 	}
 
@@ -1330,7 +1197,7 @@ dis "display problem"
 			ereturn local	k_cset		"`k_cset'"
 			ereturn local	k_2sls_cset	"`k_2sls_cset'"
 			ereturn local	lc_2sls_cset	"`lc_2sls_cset'"
-			ereturn local	lc_gmm_cset	"`lc_gmm_cset'"
+			ereturn local	lc_cset		"`lc_cset'"
 			ereturn local	clr_cset	"`clr_cset'"
 		}
 	}
@@ -1364,7 +1231,7 @@ dis "display problem"
 				ereturn local p`vnum'_k_cset			"`p`vnum'_k_cset'"
 				ereturn local p`vnum'_k_2sls_cset		"`p`vnum'_k_2sls_cset'"
 				ereturn local p`vnum'_lc_2sls_cset		"`p`vnum'_lc_2sls_cset'"
-				ereturn local p`vnum'_lc_gmm_cset		"`p`vnum'_lc_gmm_cset'"
+				ereturn local p`vnum'_lc_cset		"`p`vnum'_lc_cset'"
 				ereturn local p`vnum'_clr_cset			"`p`vnum'_clr_cset'"
 			}
 			ereturn scalar gamma_hat_p`vnum' = `gamma_hat`vnum''		// distortion cutoff for projection test
@@ -2138,7 +2005,7 @@ program define display_output
 	local name_k		: di "{txt}{ralign 7:{helpb twostepweakiv##K:K}}"
 	local name_k_2sls	: di "{txt}{ralign 7:{helpb twostepweakiv##K_2sls:K_2sls}}"
 	local name_lc_2sls	: di "{txt}{ralign 7:{helpb twostepweakiv##LC_2sls:LC_2sls}}"
-	local name_lc_gmm	: di "{txt}{ralign 7:{helpb twostepweakiv##LC_gmm:LC_gmm}}"
+	local name_lc		: di "{txt}{ralign 7:{helpb twostepweakiv##LC:LC}}"
 	local name_j		: di "{txt}{ralign 7:{helpb twostepweakiv##J:J}}"
 	local name_kj		: di "{txt}{ralign 7:{helpb twostepweakiv##K-J:K-J}}"
 	local name_wald		: di "{txt}{ralign 7:{helpb twostepweakiv##Wald:Wald}}"
@@ -2148,7 +2015,7 @@ program define display_output
 	local level_k		: di %2.0f e(k_level) "%"
 	local level_k_2sls		: di %2.0f e(k_level) "%"
 	local level_lc_2sls	: di %2.0f e(k_level) "%"
-	local level_lc_gmm	: di %2.0f e(k_level) "%"
+	local level_lc		: di %2.0f e(k_level) "%"
 	local level_j		: di %2.0f e(j_level) "%"
 	local level_kj		: di %2.0f e(kj_level) "% (" %2.0f e(kjk_level) "%," %2.0f e(kjj_level) "%)"
 	local level_wald	: di %2.0f e(wald_level) "%"
@@ -2159,7 +2026,7 @@ program define display_output
 	local ci_k		: di " {c |}{center 15:`level_k'}{res}{center 22:`e(k_cset)'}"
 	local ci_k_2sls		: di " {c |}{center 15:`level_k_2sls'}{res}{center 22:`e(k_2sls_cset)'}"
 	local ci_lc_2sls	: di " {c |}{center 15:`level_lc_2sls'}{res}{center 22:`e(lc_2sls_cset)'}"
-	local ci_lc_gmm		: di " {c |}{center 15:`level_lc_gmm'}{res}{center 22:`e(lc_gmm_cset)'}"
+	local ci_lc			: di " {c |}{center 15:`level_lc'}{res}{center 22:`e(lc_cset)'}"
 	local ci_wald		: di " {c |}{center 15:`level_wald'}{res}{center 22:`e(wald_cset)'}"
 	if ~e(closedform) {
 		local ci_kj			: di " {c |}{center 15:`level_kj'}{res}{center 22:`e(kj_cset)'}"
@@ -2169,7 +2036,7 @@ program define display_output
 		local ci_kj			: di " {c |}{center 15:`level_kj'}{res}{center 22:(*)}"
 		local ci_j			: di " {c |}{center 15:`level_j'}{res}{center 22:(*)}"
 	}
-	foreach testname in clr ar k k_2sls lc_2sls lc_gmm j kj wald {
+	foreach testname in clr ar k k_2sls lc_2sls lc j kj wald {
 	
 		local cset		"`e(`testname'_cset)'"
 		local csetlen	: length local cset
@@ -2743,53 +2610,55 @@ di as err "or specify citestlist() to calculate full confidence sets."
 	}
 * Check if test lists provided by the users are legal
 	if "`citestlist'" != "" {
-		local citestlist = lower("`citestlist'")
-		
-		if !strpos("`citestlist'", "clr") & !strpos("`citestlist'","k") & !strpos("`citestlist'","lc_2sls")&!strpos("`citestlist'","lc_gmm") ///
-		& !strpos("`citestlist'","j") & !strpos("`citestlist'","kj") & !strpos("`citestlist'","ar")  {
-di as err "citestlist option error - can construct CI based on CLR, K, K_2sls, LC_gmm, LC_2sls, J, KJ, AR tests" 
+		local citestlist 	= lower("`citestlist'")+" " // add a space for parsing list
+		local legalcitest 	"clr k_2sls k lc_2sls lc j kj ar"
+		local legal_citest 	: list citestlist in legalcitest
+		if !`legal_citest' {
+di as err "citestlist option error - can construct CI based on CLR, K, K_2sls, LC, LC_2sls, J, KJ, AR tests" 
 		exit 198
 		}
+		
 		if strpos("`citestlist'","kj") & !strpos(subinstr("`citestlist'","kj","",.),"k") & !strpos(subinstr("`citestlist'","kj","",.),"j") {
 di as err "citestlist option error - to do K-J test, you need to specify both K ant J tests"
 		exit 198
 		}
 		if !strpos("`citestlist'","lc") {
-di as err "citestlist option error - LC_2sls or LC_gmm is recommended" // some bug in collapse_citable - having LC_2sls saves some code
+di as err "citestlist option error - LC_2sls or LC is recommended" // some bug in collapse_citable - having LC_2sls saves some code
 		exit 198
 		}
-		if strpos("`citestlist'","lc_2sls") & strpos("`citestlist'","lc_gmm") {
-di as err "citestlist option error - LC_2sls and LC_gmm need to be run separately because ivreg2 specifications are different." 
-		// LC_2sls needs ivreg2, robust while LC_gmm needs ivreg2, robust md2s
+		local lc_concurr "lc_2sls lc"
+		local legal_lc : list lc_concurr in citestlist
+		local k_concurr "k_2sls k"
+		local legal_k : list k_concurr in citestlist
+		if `legal_lc' > 0 | `legal_k' > 0 {
+di as err "ptestlist option error - tests with 2sls and efficient weight matrix need to be run separately." 
 		exit 198
 		}
 	}
 	
 	if "`ptestlist'" != "" {
-		local ptestlist = lower("`ptestlist'")
-		local legal_ptest "lc_2sls lc_gmm k_2sls k" // legal ptestlist options
+		local ptestlist = lower("`ptestlist'") + " "
+		local legal_ptest "lc_2sls lc k_2sls k" // legal ptestlist options
 		dis "`ptestlist' `legal_ptest'"
 		local legal : list ptestlist in legal_ptest
 		if `legal' == 0 {
-di as err "ptestlist option error - can construct projection CI based on K, K_2sls, LC_gmm and LC_2sls" 
+di as err "ptestlist option error - can construct projection CI based on K, K_2sls, LC and LC_2sls" 
 		exit 198
 		}
-		local lc_concurr "lc_2sls lc_gmm"
+		local lc_concurr "lc_2sls lc"
 		local legal_lc : list lc_concurr in ptestlist
 		local k_concurr "k_2sls k"
 		local legal_k : list k_concurr in ptestlist
 		if `legal_lc' > 0 | `legal_k' > 0 {
 di as err "ptestlist option error - tests with 2sls and efficient weight matrix need to be run separately." 
-		// LC_2sls needs ivreg2, robust while LC_gmm needs ivreg2, robust md2s
 		exit 198
 		}
 		local lc_k_concurr "lc_2sls k"
-		local k_lc_concurr "k_2sls lc_gmm"
+		local k_lc_concurr "k_2sls lc"
 		local legal_k_lc : list k_lc_concurr in ptestlist
 		local legal_lc_k : list lc_k_concurr in ptestlist
 		if `legal_lc_k' > 0 | `legal_k_lc' > 0 {
 di as err "ptestlist option error - only allow LC and K tests with same weight matrix to be calculated together." 
-		// LC_2sls needs ivreg2, robust while LC_gmm needs ivreg2, robust md2s
 		exit 198
 		}		
 	}
@@ -2881,8 +2750,8 @@ di as err "or specify citestlist() to calculate full confidence sets."
 				local gridcols =subinstr("`gridcols'", "lc_2sls_r", "", .)
 				local gridcols =subinstr("`gridcols'", "a_diff_f", "", .)
 			} 
-			if strpos("`citestlist'", "lc_gmm") {
-				local gridcols "`gridcols' lc_gmm lc_gmm_r a_diff_f"
+			if strpos("`citestlist'", "lc ") {
+				local gridcols "`gridcols' lc lc_r a_diff_f"
 			} 
 			if strpos("`citestlist'", "k_2sls") {
 				local gridcols "`gridcols' k_2sls k_2sls_r"
@@ -5586,7 +5455,7 @@ timer on 4
 * npd is flag set to 1 if npd matrices encountered
 		local npd = 0
 
-* compute a(gamma) that is needed for calculating lc_2sls or lc_gmm in compute_test and compute_pvals
+* compute a(gamma) that is needed for calculating lc_2sls or lc in compute_test and compute_pvals
 		compute_a_min,nendog(`nendog') nsendog(`nsendog') nexexog(`nexexog') alpha(`alpha') gamma(`gamma')
 		local a_min = `r(a_min)'
 		local lc_crit = `r(lc_crit)'
@@ -5686,7 +5555,7 @@ dis "end of quiet"
 		mata: rseed(12345)     						//  set seed (replicability)
 * Calculate \tilde{a} which is the maximum of weight a(gamma) that solves K+a*S=chi2_k_df, and solve for gamma_tilde
 * Then gamma_hat is the maximum of gamma_tilde and gamma
-		if strpos("`gridcols'", "lc_2sls_r") | strpos("`gridcols'", "lc_gmm_r"){
+		if strpos("`gridcols'", "lc_2sls_r") | strpos("`gridcols'", "lc_r"){
 	
 			local a_diff_col: list posof "a_diff_f" in cnames
 			mata: `a_col' = `citable'[.,`a_diff_col']
@@ -5714,7 +5583,7 @@ dis "end of quiet"
 			return scalar gamma_hat= `gamma_hat'
 		}
 		
-		if strpos("`gridcols'", "lc_2slsp") | strpos("`gridcols'", "lc_gmmp") {
+		if strpos("`gridcols'", "lc_2slsp") | strpos("`gridcols'", "lcp") {
 		* Repeat the above procedure for projection test distortion cutoff
 			forvalues i=1/`nwendog' {
 				local a_diff_col: list posof "a_diffp`i'" in cnames
@@ -5812,7 +5681,7 @@ program grid_recurse, rclass
 			
 timer clear
 timer on 3
-	tempname rk ar_p ar_chi2 ar_df k_p k_chi2 k_2sls lc_2sls lc_2sls_r lc_gmm lc_gmm_r k_df j_p j_chi2 j_df kj_p kj_chi2 ///
+	tempname rk ar_p ar_chi2 ar_df k_p k_chi2 k_2sls lc_2sls lc_2sls_r lc lc_r k_df j_p j_chi2 j_df kj_p kj_chi2 ///
 		clr_p clr_stat clr_df ar_r k_r j_r kj_dnr kj_r kj_p clr_r				///
 		wald_p wald_chi2 wald_df wald_r
 	tempname wgridnullvector gridnullvector sbeta
@@ -5997,8 +5866,8 @@ timer on 10
 			if strpos("`gridcols'",  "lc_2sls_r") {
 				local lc_col: list posof "lc_2sls_r" in gridcols
 			}
-			else if strpos("`gridcols'",  "lc_gmm_r") {
-				local lc_col: list posof "lc_gmm_r" in gridcols
+			else if strpos("`gridcols'",  "lc_r") {
+				local lc_col: list posof "lc_r" in gridcols
 			}
 			else {
 				local lc_col = 0
@@ -6107,9 +5976,9 @@ timer off 10
 				local ar_chi2		=r(ar_chi2) // need k_2sls and ar_chi2 to calculate a_min	
 				dis "k_2sls is `k_2sls' lc_2sls is `lc_2sls' ar_chi2 is `ar_chi2'"	
 			}
-			if strpos("`gridcols'", "lc_gmm_r") { // use lc_2sls_r in case lc_2sls picks up the projection test statistics
+			if strpos("`gridcols'", "lc_r") { // use lc_2sls_r in case lc_2sls picks up the projection test statistics
 				local k_chi2		=r(k_chi2)
-				local lc_gmm		=r(lc_gmm)
+				local lc			=r(lc)
 				local ar_chi2		=r(ar_chi2) // need k_chi2 and ar_chi2 to calculate a_min		
 			}
 			if strpos("`gridcols'", "j_chi2") {
@@ -6128,11 +5997,11 @@ timer off 10
 				local ar_chi2		=r(ar_chi2) // need k_2sls and ar_chi2 to calculate a_min	
 			}
 			
-			if `nwendog' > 1 & strpos("`gridcols'", "lc_gmmp") {	
-				tempname k_chi2p lc_gmmp
+			if `nwendog' > 1 & strpos("`gridcols'", "lcp") {	
+				tempname k_chi2p lcp
 				mat `k_chi2p'		=r(k_chi2p)
-				mat `lc_gmmp'		=r(lc_gmmp)
-				*matlist `lc_gmmp'
+				mat `lcp'			=r(lcp)
+				*matlist `lcp'
 				local ar_chi2		=r(ar_chi2) // need k_chi2 and ar_chi2 to calculate a_min	
 			}
 			if `nwendog' > 1 & strpos("`gridcols'", "k_2slsp") {	
@@ -6170,12 +6039,12 @@ dis "gridcols is `gridcols'"
 				k_chi2(`k_chi2')			///
 				k_2sls(`k_2sls')			///
 				lc_2sls(`lc_2sls')			///
-				lc_gmm(`lc_gmm')			///
+				lc(`lc')			///
 				j_chi2(`j_chi2')			///
 				clr_stat(`clr_stat')		///
 				wald_chi2(`wald_chi2')		///
 				lc_2slsp(`lc_2slsp')			///
-				lc_gmmp(`lc_gmmp')			///
+				lcp(`lcp')			///
 				k_2slsp(`k_2slsp')			///
 				kp(`kp')				///
 				rk(`rk')					///
@@ -6201,11 +6070,11 @@ dis "gridcols is `gridcols'"
 				local a_diff_f= (`invchi2_k_df'-`k_2sls')/`ar_chi2'*cond(`wald_chi2'>`invchi2_k_df',1,0)
 				// record a_diff for each grid to calculate a_max at the end of grid recurse
 			}
-			if strpos("`gridcols'", "lc_gmm_r") {
-				local lc_gmm_r			=r(lc_gmm_r)
+			if strpos("`gridcols'", "lc_r") {
+				local lc_r			=r(lc_r)
 				local a_diff_f= (`invchi2_k_df'-`k_chi2')/`ar_chi2'*cond(`wald_chi2'>`invchi2_k_df',1,0)
 				// record a_diff for each grid to calculate a_max at the end of grid recurse
-				dis "lc_gmm_r is `lc_gmm_r', k_chi2 is `k_chi2' ar_chi2 is `ar_chi2' wald_chi2 is `wald_chi2' a_diff_f is `a_diff_f'"
+				dis "lc_r is `lc_r', k_chi2 is `k_chi2' ar_chi2 is `ar_chi2' wald_chi2 is `wald_chi2' a_diff_f is `a_diff_f'"
 
 			}
 			if strpos("`gridcols'", " j_p") {
@@ -6227,12 +6096,12 @@ dis "gridcols is `gridcols'"
 					local a_diffp`i'= (`invchi2_1_df'-`k_2slsp'[1,`i'])/`ar_chi2'*cond(`wald_chi2p'[1,`i']>`invchi2_1_df',1,0)
 				}		
 			}
-			// store the rejection indicator for LC_gmm projection tests in gridcols
-			if `nwendog' > 1 & strpos("`gridcols'", "lc_gmmp") {
+			// store the rejection indicator for LC projection tests in gridcols
+			if `nwendog' > 1 & strpos("`gridcols'", "lcp") {
 
 				forvalues i=1/`nwendog' {
 					local kp`i'_r = r(kp`i'_r)
-					local lc_gmmp`i'_r = r(lc_gmmp`i'_r)
+					local lcp`i'_r = r(lcp`i'_r)
 					dis "wald_chi2p"
 					matrix list `wald_chi2p'
 					// and record a_diff for each projection test - need to return k_chi2p and calculate invchi2_1_df
@@ -6295,7 +6164,7 @@ program define construct_pcitable, rclass
 				wald_level(integer 0)	///
 			]
 
-	local rlist "lc_2sls lc_gmm k_2sls k" // these test have rejection indicators
+	local rlist "lc_2sls lc k_2sls k" // these test have rejection indicators
 	local ptestlist: list testlist - rlist // make a list of tests that have p-vals
 	foreach test of local ptestlist {
 		local testcol		: list posof "`test'_p" in cnames
@@ -6377,7 +6246,7 @@ version 11.2
 mata:
 real matrix collapse_citable(									///
 							pointer p,							///
-							string scalar lc_cols,			/// has columns number of lc_2sls_r, lc_gmm_r, k_2sls_r
+							string scalar lc_cols,			/// has columns number of lc_2sls_r, lc_r, k_2sls_r
 							string scalar colsvec,				///
 							string scalar levelsvec				///
 							)
@@ -6486,8 +6355,8 @@ program get_ci_from_table, rclass
 	else {
 		//  original CI table with p-values besides lc_2sls, so need to calc rejections
 		local rtcnames			"null"
-		local rlist "lc_2sls lc_gmm k_2sls" // list of test that has rejection indicators already
-		local rtestlist : list testlist - rlist // we calculate rejection indicator for LC_2sls and LC_gmm in compute_pvals already
+		local rlist "lc_2sls lc k_2sls" // list of test that has rejection indicators already
+		local rtestlist : list testlist - rlist // we calculate rejection indicator for LC_2sls and LC in compute_pvals already
 		// rtestlist is the list of tests that need rejection indicators
 		foreach test of local rtestlist {
 			local rtcnames		"`rtcnames' `test'_r"
@@ -6770,15 +6639,8 @@ timer_on(1)
 			aux1 = qrsolve(psi,r)
 		}
 		
-		// always calculate ar_chi2 because we need it for J, RK, CLR, LC_2sls, LC_GMM
+		// always calculate ar_chi2 because we need it for J, RK, CLR, LC_2sls, LC
 		ar_chi2 = r' * aux1 
-		zz			=invsym(zzinv)
-		psi_gmm =zz * psi * zz / N
-		ar_chi2_gmm = N* (zz*r/N)'*invsym(psi_gmm)*(zz*r/N)
-		printf("compare ar_chi2 MD to psi GMM")
-		ar_chi2
-		psi_gmm
-		ar_chi2_gmm
 		
 		st_numscalar("r(ar_chi2)", ar_chi2[1,1])
 		if (strpos(gridcols, " k_p")|strpos(gridcols, "j_p")|strpos(gridcols, "lc")) {			
@@ -6800,7 +6662,8 @@ timer_on(1)
 				pi_beta = pi_beta , vec_pi_beta[r1..r2,1]
 			}
 		}
-		if (strpos(gridcols, "lc_gmm")|strpos(gridcols, " k_p")|strpos(gridcols, "j_p")|strpos(gridcols, "clr_stat")){
+		// k_chi2 stat is used in LC and K (full and projection), J and CLR
+		if (strpos(gridcols, "lc_r")|strpos(gridcols, "lcp")|strpos(gridcols, " k_p")|strpos(gridcols, " kp")|strpos(gridcols, "j_p")|strpos(gridcols, "clr_stat")){
 			aux5 = cholsolve(psi,pi_beta)
 
 			if (aux5[1,1]==.) {
@@ -6911,30 +6774,30 @@ printf("dimension of bread %9.0g %9.0g",rows(bread),cols(bread))
 			st_matrix("r(lc_2slsp)", lc_2slsp)
 			st_matrix("r(k_2slsp)", k_2slsp)
 		}
-// Calculate LC_GMM, which needs K statistics
-		if (strpos(gridcols, "lc_gmm_r")) {
+// Calculate LC, which needs K statistics
+		if (strpos(gridcols, "lc_r")) {
 			// Calculate the linear combination test statistic
-			lc_gmm			= k_chi2 + a_min*ar_chi2
+			lc			= k_chi2 + a_min*ar_chi2
 			st_numscalar("r(k_chi2)", k_chi2[1,1])
-			st_numscalar("r(lc_gmm)",lc_gmm[1,1])
+			st_numscalar("r(lc)",lc[1,1])
 		}
-		if (strpos(gridcols, "lc_gmmp")|strpos(gridcols, "kp")) {
+		if (strpos(gridcols, "lcp")|strpos(gridcols, "kp")) {
 			// Calculate projection test statistic
-			dwd			=invsym(pi_beta'*aux5)
+			dwd				=invsym(pi_beta'*aux5)
 			bread 			=r'*aux5 *dwd
 	// endog first weak, then strong endog
 			nwendog			=rows(wnullvector) // wnullvector is column vector of weakly-identified endog null
 			k_chi2p = J(1, nwendog,0)
-			lc_gmmp = J(1, nwendog,0)
+			lcp = J(1, nwendog,0)
 			for (i=1; i<=nwendog; i++) {
 				k_chi2p[1,i]=(1/dwd[i,i])*bread[1,i]*bread[1,i]
-				lc_gmmp[1,i]= k_chi2p[1,i] + a_min_p*ar_chi2
+				lcp[1,i]= k_chi2p[1,i] + a_min_p*ar_chi2
 			}
-			printf("lc_gmmp and k_chi2p and ar_chi2 are")
-			lc_gmmp
+			printf("lcp and k_chi2p and ar_chi2 are")
+			lcp
 			k_chi2p
 			ar_chi2
-			st_matrix("r(lc_gmmp)", lc_gmmp)
+			st_matrix("r(lcp)", lcp)
 			st_matrix("r(k_chi2p)", k_chi2p)
 		}
 		
@@ -7778,7 +7641,7 @@ version 11.2
 mata:
 real matrix project_test(										///
 							scalar vnum,						/// has column number of weak var in question
-							string scalar lc_cols,			/// has column numbers of LC_2sls or LC_gmm or K's rejection indicator
+							string scalar lc_cols,			/// has column numbers of LC_2sls or LC or K's rejection indicator
 							pointer p,						///
 							scalar points,						///
 							string scalar pointsvec,			///
@@ -7794,7 +7657,7 @@ real matrix project_test(										///
 	rtable			= (100*(*p)[.,gridcols]) :< (100 :- levels)	//  missings => zeros (thus included in CI)
 
 	if (lc_col[1,1]>0) {
-		rtable			= (*p)[.,vnum], rtable, (*p)[., lc_col]	//  append column 1 with grid nulls for sorting and last column LC_2slsp`vnum'_r or LC_gmmp`vnum'_r
+		rtable			= (*p)[.,vnum], rtable, (*p)[., lc_col]	//  append column 1 with grid nulls for sorting and last column LC_2slsp`vnum'_r or LCp`vnum'_r
 	}
 	else {
 		rtable			= (*p)[.,vnum], rtable
@@ -7905,13 +7768,13 @@ program compute_pvals, rclass
 				k_chi2(real 0)			///
 				k_2sls(real 0)			///
 				lc_2sls(real 0)			///
-				lc_gmm(real 0)			///
+				lc(real 0)			///
 				j_chi2(real 0)			///
 				kwt(string)				///
 				clr_stat(real 0)		///
 				wald_chi2(real 0)		///
 				lc_2slsp(name local)		/// row vector of lc_2sls test statistics for projection tests
-				lc_gmmp(name local)		/// 
+				lcp(name local)		/// 
 				k_2slsp(name local)		///
 				kp(name local)			///
 				rk(real 0)				///
@@ -8016,20 +7879,20 @@ timer on 2
 	}
 
 * linear combination with efficient weight matrix.
-	if strpos("`gridcols'", "lc_gmm_r") {	
+	if strpos("`gridcols'", "lc_r") {	
 	// rather than calculating p-value, we calculate rejection is test stat>critical value
-		local lc_gmm_r = cond(`lc_gmm'>`lc_crit'	,1,0)	
-		return scalar lc_gmm_r		=`lc_gmm_r'
+		local lc_r = cond(`lc'>`lc_crit'	,1,0)	
+		return scalar lc_r		=`lc_r'
 	}
-	if (strpos("`gridcols'", "lc_gmmp")|strpos("`gridcols'", "kp")) {
+	if (strpos("`gridcols'", "lcp")|strpos("`gridcols'", "kp")) {
 	// also calculate rejection indicator for projection test for each component - save into a vector
 	// loop over the row vector of projection test statistis - faster than reading matrix into mata
 		local nwendog = `nendog' - `nsendog'
 		forvalues i = 1/`nwendog' {
-			local lc_gmmp`i'_r= cond(`lc_gmmp'[1,`i']>`lc_crit_p'	,1,0)
-			return scalar lc_gmmp`i'_r= `lc_gmmp`i'_r'
+			local lcp`i'_r= cond(`lcp'[1,`i']>`lc_crit_p'	,1,0)
+			return scalar lcp`i'_r= `lcp`i'_r'
 			if (strpos("`gridcols'", "kp")) {
-				dis "1,1 invalid name is probably here - lc_gmm and k need to be separately"
+				dis "1,1 invalid name is probably here - lc and k need to be separately"
 				local kp`i'_r= cond(`kp'[1,`i']>`invchi2_1_df'    ,1,0)
 				return scalar kp`i'_r= `kp`i'_r'
 			}
