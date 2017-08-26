@@ -156,7 +156,7 @@ di as err "Internal twostepweakiv error - preserve failed"
 	local note2			"`s(note2)'"
 	local note3			"`s(note3)'"
 	local iid			"`s(iid)'"
-display "waldcmd is `waldcmd'!!!"
+
 ************************* Prep for transformations **************************************
 
 * If TS or FV operators used, replace with temporary variables.
@@ -307,6 +307,7 @@ dis "ninexog is `exexog'"
 
 ****************************** GET OPTION SPECS *************************************
 * Now all varlists and counts are complete, so get option specs
+dis "waldcmd is `waldcmd'"
 
 	get_option_specs,									///
 						`opts'							/// 
@@ -318,6 +319,7 @@ dis "ninexog is `exexog'"
 						nsendog(`nsendog')				/// #strongly IDed endog; also boolean
 						ncsendog(`ncsendog')			/// #not in subset test
 						npwendog(`npwendog')			/// #weakd IDed for projection-based inference; also boolean
+						waldcmd(`waldcmd')				/// estimator type
 			 			wbeta(`wbeta')					///	row vector
 						var_wbeta(`var_wbeta'))
 
@@ -1141,13 +1143,13 @@ dis "display problem"
 	ereturn scalar	ar_df				=`ar_df'
 
 	if `overid' {
-		ereturn scalar	kjj_level		=`kjj_level'
-		ereturn scalar	kjk_level		=`kjk_level'
-		ereturn scalar	kj_level		=`kj_level'
-		ereturn scalar	kwt				=`kwt'
+		//ereturn scalar	kjj_level		=`kjj_level'
+		//ereturn scalar	kjk_level		=`kjk_level'
+		//ereturn scalar	kj_level		=`kj_level'
+		//ereturn scalar	kwt				=`kwt'
 		
-		ereturn scalar	j_level			=`j_level'
-		ereturn scalar	j_df			=`j_df'
+		//ereturn scalar	j_level			=`j_level'
+		//ereturn scalar	j_df			=`j_df'
 
 		ereturn scalar	k_level			=`k_level'
 		ereturn scalar	k_df			=`k_df'
@@ -1155,7 +1157,7 @@ dis "display problem"
 		ereturn scalar	gamma_level			=`gamma_level'
 		ereturn scalar  gamma_hat			=`gamma_hat'
 
-		ereturn scalar	clr_level		=`clr_level'
+		//ereturn scalar	clr_level		=`clr_level'
 
 	}
 	if `testid' {
@@ -1283,12 +1285,12 @@ dis "display problem"
 	ereturn scalar	ci					=`ci'
 	ereturn scalar	small				=("`small'"~="")
 	ereturn scalar	npd					=`npd'
-	if `lm'	{
-		ereturn local method			"lm"
-	}
-	else {
+	//if `lm'	{
+	//	ereturn local method			"lm"
+	//}
+	//else {
 		ereturn local method			"md"
-	}
+	//}
 	
 	if "`waldcmd'"=="xtabond2" {									//  need to store extra info for replay to work
 		foreach m in X Y Z ideqt ivequation gmmequation {
@@ -2129,12 +2131,12 @@ program define display_output
 		if ~e(overid) {
 			local cue	"IV (exactly-identified)"
 		}
-		else if e(iid) {
-			local cue	"LIML"
-		}
-		else if e(method)=="lm" {
-			local cue	"CUE"
-		}
+	//	else if e(iid) {
+	//		local cue	"LIML"
+	//	}
+	//	else if e(method)=="lm" {
+	//		local cue	"CUE"
+	//	}
 		else {
 			local cue	"CUE-MD"
 		}
@@ -2413,7 +2415,7 @@ program define get_option_specs, rclass
 			iid(integer 0) overid(integer 0)									///
 			nendog(integer 0) nwendog(integer 0) nsendog(integer 0)				///
 			ncsendog(integer 0) npwendog(integer 0)								///
-			wbeta(name) var_wbeta(name)											///
+			waldcmd(string) wbeta(name) var_wbeta(name)											///
 			retmat ci lmwt(numlist max=1 >0 <1)									/// <= legacy options from rivtest
 			*																	///
 			]
@@ -2676,7 +2678,15 @@ di as err "ptestlist option error - only allow LC and K tests with same weight m
 		if `nwendog' == 1 {
 	* if #wendog=1, then  ptestlist is empty
 			if "`citestlist'" == "" {
-				local citestlist			"k lc_2sls ar"
+				if "`waldcmd'"=="2sls" | "`waldcmd'"=="liml"  {
+						local citestlist			"k_2sls lc_2sls ar"
+				}
+				else if "`waldcmd'"=="md2s" | "`waldcmd'"=="cue"  {
+						local citestlist			"k lc ar"
+				} 
+				else {
+						local citestlist			"k_2sls lc_2sls ar"
+				}
 			}
 		local testlist   "`citestlist'"
 		local ptestlist			""
@@ -2686,11 +2696,19 @@ di as err "to calculate confidence set, you do not need to specify project()."
 			exit 198
 			}
 		}
-	* if #wendog>1, the default is to calculate only ptestlist - lc_2sls. 
+	* if #wendog>1, the default is to calculate only lc_2sls or lc. 
 	* if the user specifies citestlist, then we calculate confidence sets for the full vector	
 		if `nwendog' >1 {
 			if "`ptestlist'" == "" & "`project'" != ""  {
-				local ptestlist			"lc_2sls" 
+				if "`waldcmd'"=="2sls" | "`waldcmd'"=="liml"  {
+						local ptestlist			"lc_2sls"
+				}
+				else if "`waldcmd'"=="md2s" | "`waldcmd'"=="cue"  {
+						local ptestlist			"lc"
+				} 
+				else {
+						local ptestlist			"lc_2sls"
+				}
 			}
 		local testlist  "`citestlist'"
 		* if project() is empty, prompt the user to specify
@@ -3115,12 +3133,12 @@ di as err "error - misspecified weights"
 	}
 	dis "vceopt is `vceopt' default use robust avar for test statistics - only consider heteroskedasticity for now - CHANGE"
 * Assemble notes for table output
-	if `iid' { // Forces to display tests robust to heteroskedasticity
-		//local note1 "Tests assume i.i.d. errors."
-		local note1 "Tests robust to heteroskedasticity"
-	}
-	else {
-		if "`s(robust)'`s(cluster)'"~="" {
+	//if `iid' { // Forces to display tests robust to heteroskedasticity
+	//	//local note1 "Tests assume i.i.d. errors."
+	//	local note1 "Tests robust to heteroskedasticity"
+	//}
+	//else {
+	//	if "`s(robust)'`s(cluster)'"~="" {
 			local note1 "Tests robust to heteroskedasticity"
 			if "`s(cluster)'"~="" {
 				local note1 "`note1' and clustering on `s(clustvar1)'"
@@ -3131,12 +3149,15 @@ di as err "error - misspecified weights"
 					local note1 "`note1' (N_clust=`s(N_clust1)') and `s(clustvar2)' (N_clust=`s(N_clust2)')"
 				}
 			}
-			local note1 "`note1'."
-		}
+			else {
+				local note1 "`note1'."
+			}
+	//	}
 		if "`s(kernel)'"~="" {
 			local note2 "Tests robust to autocorrelation: kernel=`s(kernel)', bw=`s(bw)'."
 			}
-	}
+	//}
+
 	if "`s(small)'"~="" {
 		local note3 "Small sample adjustments were used."
 	}
@@ -6514,15 +6535,20 @@ program compute_a_min, rclass
 				gamma(integer 0)		///
 			]
 
-	tempname a_min k_df j_df fh a g lc_crit a_min_p lc_crit_p
+	tempname a_min k_df j_df fh a g lc_crit a_min_p lc_crit_p basepath a_minpath
 	local k_df		= `nendog' - `nsendog'
 	local a			= 100-`alpha'
 	local g			= `gamma'
 // The first column is alpha, the second column is gamma
 // The third column p and the fourth column is k
 // The fifth column returns the a_min and the sixth column returns lc_crit
-
-	file open `fh' using "a_min.txt", read
+	
+	mata:`basepath'=J(1,1,"")
+	mata:pathsplit(findfile("twostepweakiv.ado"),`basepath',"")
+	mata:st_local("a_minpath",pathjoin(`basepath',"a_min.txt"))
+	
+	//file open `fh' using "a_min.txt", read
+	file open `fh' using "`a_minpath'", read
 	file read `fh' line
 	while `=word("`line'",1)'!=`a'|`=word("`line'",2)'!=`g'|`=word("`line'",3)'!=`k_df'|`=word("`line'",4)'!=`nexexog' {
 		file read `fh' line	
@@ -6532,7 +6558,7 @@ program compute_a_min, rclass
 	return local lc_crit = `6'	
 	file close `fh'
 
-	file open `fh' using "a_min.txt", read
+	file open `fh' using "`a_minpath'", read
 	file read `fh' line
 	while `=word("`line'",1)'!=`a'|`=word("`line'",2)'!=`g'|`=word("`line'",3)'!=1|`=word("`line'",4)'!=`nexexog' {
 		file read `fh' line	
