@@ -7,15 +7,15 @@ gamma_grid=[0.01 0.02 0.05 0.1 0.15 0.2];
 %Set up the matrix for output
 output=[];
 
-%Sets the matrix for p and k combinations. 
-p_grid=[1:1:2];
+%Sets p and k values. 
+p_grid=[1:1:5];
 k_grid=[1:1:50];
 p_k_array={p_grid, k_grid};
 
-m=length(p_grid);
+m=size(p_k_array,2);% 2 columns
 p_k_mat=p_k_array(1);
 p_k_mat=cell2mat(p_k_mat)';
-%%
+%%Sets pkx2 matrix for p and k combinations.
 if m>1
     for n=2:m
         p_k_old=p_k_mat;

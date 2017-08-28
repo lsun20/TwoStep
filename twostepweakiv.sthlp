@@ -22,7 +22,7 @@ Standalone estimation (specifying model to be estimated):
 {it:depvar} [{it:varlist1}]
 {cmd:(}{it:varlist2}{cmd:=}{it:varlist_iv}{cmd:)} [{it:weight}]
 [{cmd:if} {it:exp}] [{cmd:in} {it:range}]
-{bind:[{cmd:,} {it:project(var1)}}
+{bind:[{cmd:,} {it:project(varlist)}}
 {it:test_options} {it:grid_options} {it:size_options} {it: strong_options}]
 
 
@@ -39,7 +39,7 @@ limited-information maximum likelihood estimator.
 two-step minimum distance estimator.
 {p_end}
 {synopt:{opt cue}}
-continuous updating minimum distance estimator describned in Magnusson (2010).
+continuous updating minimum distance estimator described in Magnusson (2010).
 {p_end}
 {synoptline}
 {p2colreset}{...}
@@ -49,8 +49,8 @@ continuous updating minimum distance estimator describned in Magnusson (2010).
 {synoptline}
 {synopt:{opt citestlist(testlist)}}
 construct confidence sets for the full parameter vector based on the specified 
-tests (AR, K, K_2sls, LC, LC_2sls);if unspecified, default tests are Wald, AR, 
-K_2sls, and LC_2sls for {opt 2sls} and {opt liml} estimators, whereas Wald, AR, 
+tests (AR, K, K_2sls, LC, LC_2sls). If unspecified, default tests are Wald, AR, 
+K_2sls, and LC_2sls for {opt 2sls} and {opt liml} estimators; and Wald, AR, 
 K, and LC for {opt md2s} and {opt cue} estimators.
 {p_end}
 {synopt:{opt project(varlist)}}
@@ -61,14 +61,17 @@ other endogenous regressors η as free unknown parameters (nuisance parameters.)
 See option strong if we are willing to make additional assumptions about η.
 {opt project(varlist)} conducts inference for each of the variable specified in the {it: varlist }
 based on the refined projection method. For example,
-{opt project(_all)} requests reporting refined projection-based confidence sets
-for all weakly-identified coefficients.
+{opt project(_all)} reports refined projection-based confidence sets
+for every weakly-identified coefficient. Unforunately, 
+this version of {opt twostepweakiv} does not support
+projection-based confidence sets for two endogenous regressors e.g. {opt project2(var1 var2)}
+from {helpb weakiv}.
 {p_end}
 {synopt:{opt ptestlist(project_testlist)}}
 construct confidence sets using refined projection method for β specified 
 in {opt project} based on the specified 
-tests (K, K_2sls, LC, LC_2sls);if unspecified, default tests are Wald and LC_2sls 
-for {opt 2sls} and {opt liml} estimators, whereas Wald and
+tests (K, K_2sls, LC, LC_2sls). If unspecified, default tests are Wald and LC_2sls 
+for {opt 2sls} and {opt liml} estimators; and Wald and
  LC for {opt md2s} and {opt cue} estimators.
 {p_end}
 {synoptline}
@@ -99,7 +102,7 @@ in this example, the total number of grid points searched is 5^6 = 15,625.
 A large number of grid points will increase the required computation time,
 but a greater number of grid points
 will improve the precision of both graphs and confidence sets.
-for testing a point null hypothesis e.g. 0, set grid point to 1 and gridmin=gridmax=0.
+For testing a point null hypothesis e.g. 0, set grid point to 1 and gridmin=gridmax=0.
 {p_end}
 {synopt:{opt gridmult(#)}}
 multiplier of Wald confidence-interval for grid. The default is {cmd:gridmult(2)}.
@@ -123,13 +126,13 @@ and include them in grid.
 {synopt:{opt level(#)}}
 confidence level as a percentage (same for all tests performed); 
 The default is {cmd:level(95)} for size 5% tests; if specified, {cmd:level(#)} 
-has to be from 99,98,95,90,85,80 because weights used in {it: LC} and {it:  LC_2sls } tests
+has to be one of  99, 98, 95, 90, 85, or 80 because weights used in {it: LC} and {it:  LC_2sls } tests
 are pre-tabulated only for these values.
 {p_end}
 {synopt:{opt gammalevel(#)}}
 distortion level for two-step confidence sets based on {it:LC} or {it:LC_2sls} test as a percentage;
 The default is {cmd:gammalevel(5)} for a 5% coverage distortion; if specified, 
-{cmd: gammalevel(#)} has to be from 1,2,5,10,15,20 because weights used in {it: LC} and {it:  LC_2sls } tests
+{cmd: gammalevel(#)} has to be one of 1, 2, 5, 10, 15, or 20 because weights used in {it: LC} and {it:  LC_2sls } tests
 are pre-tabulated only for these values. See Andrews (forthcoming) for more details on {cmd: gammalevel(#)}.
 {p_end}
 {synoptline}
@@ -178,7 +181,7 @@ Note that this option may be computationally intensive.
 {title:Description}
 
 {pstd}
-Building on existing Stata package {helpb weakiv}, {opt twostepweakiv} construct tests for weak instruments and two-step 
+Building on the existing Stata package {helpb weakiv}, {opt twostepweakiv} construct tests for weak instruments and two-step 
 identification-robust confidence sets for the coefficients on endogenous variables 
 by comparing non-robust Wald confidence sets to robust confidence sets 
 based on the linear combination test proposed by Andrews (2016).
@@ -194,7 +197,7 @@ variable of interest when there are multiple endogenous variables using a refine
 projection method as in Andrews (Forthcoming). 
 There are several options available for models with 2 or more endogenous regressors.
 (a) The user can specify, using the {opt strong(.)} option,
-that some coefficients are strongly identifed,
+that some coefficients are strongly identified,
 in which case {opt twostepweakiv} will report tests for the
 weakly-identified subset of coefficients.
 (b) The {opt project(.)} option requests the reporting
@@ -355,33 +358,33 @@ The conventional projection-based confidence set for {cmd:exper}  corresponds to
 the range of the y axis under the joint confidence set, which can be calculated similarly.{p_end}
 
 	{cmd:matrix table = e(citable)}
-	{cmd:matrix p1table = J(10,2,.) //create a matrix with grid points of educ and rejection indicator}
-	{cmd:matrix colnames p1table = null1 lc_2sls_r}
+	{cmd:matrix p1citable = J(10,2,.) //create a matrix with grid points of educ and rejection indicator}
+	{cmd:matrix colnames p1citable = null1 lc_2sls_r}
 	{cmd:forval i = 1/10 {c -(}}
 	{cmd:	local r1=15*(`i'-1)+1 //for each grid point of x, there are 15 grid points of y}
 	{cmd:	local r2=15*(`i')}
-	{cmd:	matrix p1table[`i',1]=table[`r1',"null1"]}
+	{cmd:	matrix p1citable[`i',1]=table[`r1',"null1"]}
 	{cmd:	matrix lc_2sls_r_vector = table[`r1'..`r2',"lc_2sls_r"]}
 	{cmd:	mata: st_matrix("r",sum(st_matrix("lc_2sls_r_vector")):==15) //a grid point x0 is rejected if all grid points of (x0,y) are rejected}
-	{cmd:	matrix p1table[`i',2]=r}
+	{cmd:	matrix p1citable[`i',2]=r}
 	{cmd:{c )-}}
-	{cmd:matrix list p1table}
+	{cmd:matrix list p1citable}
 	
 	{cmd:matrix table = e(citable)}
 	{cmd:local citablerowname : colfullnames table}
 	{cmd:mata : st_matrix("table", sort(st_matrix("table"), 2)) //citable is sorted by grid points of x, now need to resort by y}
 	{cmd:matrix colnames table = `citablerowname'}
-	{cmd:matrix p2table = J(15,2,.) //create a matrix with grid points of educ and rejection indicator}
-	{cmd:matrix colnames p2table = null2 lc_2sls_r}
+	{cmd:matrix p2citable = J(15,2,.) //create a matrix with grid points of educ and rejection indicator}
+	{cmd:matrix colnames p2citable = null2 lc_2sls_r}
 	{cmd:forval i = 1/15 {c -(}}
 	{cmd:	local r1=10*(`i'-1)+1 //for each grid point of y, there are 10 grid points of x}
 	{cmd:	local r2=10*(`i')}
-	{cmd:	matrix p2table[`i',1]=table[`r1',"null2"]}
+	{cmd:	matrix p2citable[`i',1]=table[`r1',"null2"]}
 	{cmd:	matrix lc_2sls_r_vector = table[`r1'..`r2',"lc_2sls_r"]}
 	{cmd:	mata: st_matrix("r",sum(st_matrix("lc_2sls_r_vector")):==10) //a grid point y0 is rejected if all grid points of (x,y0) are rejected}
-	{cmd:	matrix p2table[`i',2]=r}
+	{cmd:	matrix p2citable[`i',2]=r}
 	{cmd:{c )-}}
-	{cmd:matrix list p2table}
+	{cmd:matrix list p2citable}
 
 {pstd}
 
@@ -488,7 +491,7 @@ xx will be 1 or 2 numbers corresponding to the endogenous regressor(s){p_end}
 {pstd}
 {opt twostepweakiv} builds on and extends the command {helpb weakiv} by Finlay, Magnusson and Schaffer  (2013).
 The main differences and extensions are:
-(a) construct valid two-step identification-robust confidence sets based on Andrews (forthcoming);
+(a) construct valid two-step identification-robust confidence sets based on Andrews (forthcoming) for MD models;
 (b) implement linear combination test based on Andrews (2016) and support K test with inefficient weight matrix;
 (c) support for MD versions of estimators and tests;
 (d) support for refined projection-based inference;
@@ -646,7 +649,7 @@ to the research community, like a paper. Please cite it as such: {p_end}
 {phang}Sun, L., 2017.
 twostepweakiv: valid two-step identification-robust confidence sets
 for instrumental-variable (IV) estimation of linear models.
-
+{browse "https://github.com/lsun20/TwoStep":https://github.com/lsun20/TwoStep}.
 
 {title:Author}
 

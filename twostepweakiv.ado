@@ -205,7 +205,6 @@ di as err "Internal twostepweakiv error - preserve failed"
 	clean_varlist `wtexp' if `touse', vlist(`exexog') vlist_t(`exexog_t') `noconstant'
 	local exexog_t	"`r(vlist_c_t)'"
 	local nexexog	=r(nvars_c)					//  update count
-dis "ninexog is `exexog'"
 
 * Process included exogenous
 	local templist
@@ -286,9 +285,7 @@ dis "ninexog is `exexog'"
 * ebeta is full set of Wald estimates; wbeta is weakly-ID only
 	mat `fullbeta' = e(b)											//  fullbeta has all coeffs including exogenous
 	mat `var_fullbeta'=e(V)
-	display "Wald Model estimates"
-	matrix list `fullbeta'
-	matrix list `var_fullbeta'
+
 	foreach cn of local endopos {									//  ebeta has all endog coeffs
 		mat `ebeta' = nullmat(`ebeta') , `fullbeta'[1,`cn']
 	}
@@ -307,7 +304,6 @@ dis "ninexog is `exexog'"
 
 ****************************** GET OPTION SPECS *************************************
 * Now all varlists and counts are complete, so get option specs
-dis "waldcmd is `waldcmd'"
 
 	get_option_specs,									///
 						`opts'							/// 
@@ -488,7 +484,7 @@ di as err "Fixed-effects estimation requires data to be -xtset-"
 	tempname S S11 S12 S22 zz zzinv x2z xx zx xy x1x1 x2x2 x1x2 zx1 zx2 zy x1y x2y yy
 	tempname sbeta cueinitbeta iv_sbeta0 pi2hat ecuebeta wcuebeta var_ecuebeta var_wcuebeta var3 // for cuepoint; var3 is used for variance estimates
 	if "`waldcmd'" != "" & "`waldcmd'" != "cue" {
-		tempname var_w`waldcmd'beta var_e`waldcmd'beta e`waldcmd'beta w`waldcmd'beta // for point estimates CHANGE
+		tempname var_w`waldcmd'beta var_e`waldcmd'beta e`waldcmd'beta w`waldcmd'beta // for point estimates 
 	}
 	tempname F // F statistics
 	tempname bhat pi_z1 pi_z2 var_pidel_z1 var_pidel_z2 var_pi_z11 var_pi_z12 var_pi_z22
@@ -510,14 +506,14 @@ di as err "Fixed-effects estimation requires data to be -xtset-"
 		mat `cueinitbeta' = `ebeta' // in case ebeta gets used in get_strong_beta						
 
 		if ~`overid' & `cuepoint' {								//  if exactly-ID, CUE=LIML=IV
-			di as text "Exactly identified: CUE point estimates are the same as IV estimates..."
+di as text "Exactly identified: CUE point estimates are the same as IV estimates..."
 			mat `ecuebeta'	= `ebeta'
 			mat `wcuebeta'	= `wbeta'
 		}
 		// Calculate point estimates and variance for specified estimator
 	 if "`waldcmd'" == "2sls" {
-		di as text "Obtaining 2SLS point estimates..."
-		di as text "point estimates should be identical to Wald, but VCE may be different (because we use robust formula)"
+di as text "Obtaining 2SLS point estimates..."
+//point estimates should be identical to Wald, but VCE may be different (because we use robust VCE formula)
 		computecrossprods, touse(`touse') wtexp(`wtexp') exexog(`exexog_t') wendo(`endo_t') depvar(`depvar_t')
 			mat `zz'     = r(zz)
 			mat `x1x1'   = r(x1x1)
@@ -526,8 +522,6 @@ di as err "Fixed-effects estimation requires data to be -xtset-"
 			mat `zy'     = r(zy)
 			mat `yy'     = r(yy)
 
-	* Always need to use an iid method (IV), either for final strong beta or for initial value for non-iid strong beta
-	* IS THIS STATEMENT STILL TRUE?
 		mat `wnullvector' = J(1,`nendog',0) // set to zero so iv_s_beta goes through
 		get_strong_beta,							///
 							iv				///  IV
@@ -556,13 +550,7 @@ di as err "Fixed-effects estimation requires data to be -xtset-"
 
 		mat `sbeta'		= r(sbeta)
 		mat `var_e2slsbeta'      = r(var_beta)
-		dis "2sls estimates are!"	
-		mat list `sbeta'
-		mat list `var_e2slsbeta'
-		// Replace previous VCE estimator in Wald model (e.g. ivreg2) with MD 2SLS VCE estimator - just the variance is different
 
-		display "2sls Model variance estimates"
-		matrix list `var_wbeta'
 		mat colnames `var_e2slsbeta' = `endo'
 		mat rownames `var_e2slsbeta' = `endo'
 		foreach vn of local wendo {
@@ -571,13 +559,12 @@ di as err "Fixed-effects estimation requires data to be -xtset-"
 		foreach vn of local wendo {
 			mat `var_w2slsbeta' = nullmat(`var_w2slsbeta') \ `var3'["`vn'",1...] // select the rows
 		}
-		display "2sls VCV is for `wendo'"
-			matrix list `var_w2slsbeta'
-			mat `var_wbeta' = `var_w2slsbeta'
+		// Replace previous VCE estimator in Wald model (e.g. ivreg2) with MD 2SLS VCE estimator - just the variance is different
+		mat `var_wbeta' = `var_w2slsbeta'
 		
 	} 
 	else if  "`waldcmd'" != "" {
-		di as text "Obtaining `waldcmd' point estimates..."		
+di as text "Obtaining `waldcmd' point estimates..."		
 				get_strong_beta,							///
 							`waldcmd'						/// 
 							`varflag'				///
@@ -594,7 +581,6 @@ di as err "Fixed-effects estimation requires data to be -xtset-"
 							wvar(`wvar')			///
 							wf(`wf')				///
 							traceonoff("on") 
-			dis "get_strong_beta runs"			
 			mat `e`waldcmd'beta'=r(sbeta)							//  estimates for all endogenous - row vector
 			mat colnames `e`waldcmd'beta' = `endo'
 			foreach vn of local wendo {							//  estimates for weakly-ID only
@@ -610,10 +596,6 @@ di as err "Fixed-effects estimation requires data to be -xtset-"
 			foreach vn of local wendo {
 				mat `var_w`waldcmd'beta' = nullmat(`var_w`waldcmd'beta') \ `var3'["`vn'",1...] // select the rows
 			}
-			display "`waldcmd' estimates for endo"
-			matrix list `e`waldcmd'beta'
-			display "`waldcmd' VCE is for `endo'"
-			matrix list `var_e`waldcmd'beta'
 				
 			// Replace previous estimates in Wald model (i.e. ivreg2)
 			mat `ebeta' = `e`waldcmd'beta'
@@ -623,7 +605,7 @@ di as err "Fixed-effects estimation requires data to be -xtset-"
 		
 	}
 	if  "`waldcmd'" != "cue" & `cuepoint' & `overid' {
-				di as text "Obtaining CUE point estimates for cuepoint..."
+di as text "Obtaining CUE point estimates for cuepoint..."
 					local varflag ""				// if just cuepoint, then don't calculate variance
 						
 				get_strong_beta,					///
@@ -645,7 +627,6 @@ di as err "Fixed-effects estimation requires data to be -xtset-"
 								
 
 			mat `ecuebeta'=r(sbeta)								//  CUE estimate for all endogenous - row vector
-			matrix list `ecuebeta'
 			mat colnames `ecuebeta' = `endo'
 			foreach vn of local wendo {							//  CUE estimate for weakly-ID only
 				mat `wcuebeta' = nullmat(`wcuebeta') , `ecuebeta'[1,"`vn'"]
@@ -695,7 +676,6 @@ di as err "error: number of weakly endogenous (`nwendog') doesn't match number o
 		mat `x2y'    = r(x2y)
 		mat `zy'     = r(zy)
 		mat `yy'     = r(yy)
-dis "need wendo `wendo_t' here?"		
 
 * Always need to use an iid method (IV), either for final strong beta or for initial value for non-iid strong beta
 		get_strong_beta,							///
@@ -722,7 +702,6 @@ dis "need wendo `wendo_t' here?"
 							wvar(`wvar')			///
 							wf(`wf')
 							
-dis "here"
 
 		mat `sbeta'		= r(sbeta)
 		mat `iv_sbeta0'	= r(iv_sbeta0)				//  IV beta for strongly-idenfified send at null=0 (used in grid search)
@@ -787,17 +766,14 @@ dis "here"
 		
 			mata: pi_z		=st_matrix("r(pi_z)")
 			mata: var_pi_z	=st_matrix("r(var_pi_z)")
-			dis "F-stat"
 
 			mata: first		= J(`nendog',1,.)
 			mata: for (i=1; i<=`nendog'; i++) first[i,1] = pi_z[.,i]' * invsym(var_pi_z[(i-1)*`nexexog'+1..(i)*`nexexog',(i-1)*`nexexog'+1..(i)*`nexexog'])* pi_z[.,i]/`nexexog'
 			// need to fit mata loop in one line
-			mata: first
 			mata: st_matrix("r(first)", first)
 			
 			mat `F'			= r(first)
-			dis "F stats are"
-			mat list `F'
+
 
 
 
@@ -835,8 +811,6 @@ di as err "         weakiv rk stat df=`rk_df'; ranktest id stat df=`idstat_df'
 
 		if `cuepoint' {
 			local wgridbeta		"`wcuebeta'"
-			dis "wcuebeta is "
-			matrix list `wcuebeta' 
 			local usecue		1								//  option to trigger inclusion of CUE beta in grid
 		}
 		else {
@@ -934,7 +908,6 @@ di as err "         weakiv rk stat df=`rk_df'; ranktest id stat df=`idstat_df'
 			wvar(`wvar')				///
 			wf(`wf')					///
 			forcerobust(`forcerobust')
-dis "construct_citable runs here"
 
 		local npd					=max(`npd',r(npd))		//  promote to 1 if npd matrix ever encountered
 		local citable_cnames		"`r(cnames)'"			//  aligns with columns of Mata matrix `citable'
@@ -983,7 +956,6 @@ dis "construct_citable runs here"
 				j_level(`j_level')			///
 				kj_level(`kj_level')		///
 				clr_level(`clr_level')
-dis "get_ci_from_table runs here"
 		}
 
 * Save CIs as local macros
@@ -1000,11 +972,11 @@ dis "get_ci_from_table runs here"
 		local wald_cset	"`r(wald_cset)'"
 				
 	}	//  end construction of confidence interval
-dis "here npwendog is `npwendog'"
+
 **************** PROJECTION-BASED INFERENCE ********************
 * construct 1-D projection-based CIs
 	if `npwendog' & `usegrid' {
-dis "here"
+
 		foreach vname of local pwendo {
 		
 			local vnum			: list posof "`vname'" in wendo
@@ -1116,7 +1088,7 @@ dis "here"
 ************************ DISPLAY/POST/GRAPH RESULTS *********************************
 * `esample' is same as `touse', except with xtabond2 when `esample' = e(sample) from original estimation
 	ereturn post , dep(`depvar') obs(`N') esample(`esample')
-dis "display problem"
+
 	ereturn scalar	endo_ct				=`nendog'		//  #all lendogenous
 	ereturn scalar	wendo_ct			=`nwendog'		//  #weak endog, also used as flag for K=1 or K=2 case
 	ereturn scalar	sendo_ct			=`nsendog'		//  #strong endog
@@ -1262,15 +1234,13 @@ dis "display problem"
 	//}
 
 	if `cuepoint' {
-	dis "here"
 		ereturn matrix	cuebeta			=`ecuebeta'
-		dis "here ecuebeta"
 	}
-	dis "if hitting an error msg below, coult be that ebeta is not returned because used in get_strong_beta"
+	//if hitting an error msg below, coult be that ebeta is not returned because used in get_strong_beta"
 	ereturn matrix	ebeta				=`ebeta'
 	ereturn matrix	var_wbeta			=`var_wbeta'
 	ereturn matrix	wbeta				=`wbeta'
-	dis "if hitting an error msg below, could be that does not have F matrix calculated because did not call 2sls"
+	//if hitting an error msg below, could be that does not have F matrix calculated because did not call 2sls"
 	ereturn matrix  F				=`F'
 	ereturn scalar	overid				=`overid'
 	//ereturn scalar	iid				=`iid'
@@ -2324,13 +2294,11 @@ di as err "error - unsupported estimator `cmd'"
 	if "`cmd'" == "ivreg2" {											//  exploit ivreg2 nooutput option; means
  																		//  warning messages will be reported
 		local optexp	: subinstr local optexp "nooutput" ""			//  remove it in case it's already there
-		dis "`anything' what is the command CHANGE"
 		`anything' `if' `in' `wtexp' `optexp' nooutput					//  and now force use
 	}
 	else if `legal_estimator' {
 		local anything = subinword("`anything'","`cmd'","ivreg2",1) // still need to use ivreg2 for parsing and initial beta
 		local optexp	: subinstr local optexp "nooutput" ""			//  remove it in case it's already there
-		dis "`anything' what is the command CHANGE"
 		`anything' `if' `in' `wtexp' `optexp' nooutput					//  and now force use
 		ereturn local cmd "`cmd'" // manually overwrite/pass on the cmd for get_model_specs
 	}
@@ -2641,7 +2609,6 @@ di as err "ptestlist option error - tests with 2sls and efficient weight matrix 
 	if "`ptestlist'" != "" {
 		local ptestlist = lower("`ptestlist'") + " "
 		local legal_ptest "lc_2sls lc k_2sls k" // legal ptestlist options
-		dis "`ptestlist' `legal_ptest'"
 		local legal : list ptestlist in legal_ptest
 		if `legal' == 0 {
 di as err "ptestlist option error - can construct projection CI based on K, K_2sls, LC and LC_2sls" 
@@ -3074,7 +3041,6 @@ di as err "syntax error - variable listed in project(.) but not in weakly endoge
 	local nexexog	: word count `s(exexog_t)'		// xtabond2 does not have an exexog list since all IVs are temp vars
 	local ninexog	: word count `s(inexog)'
 	local ntinexog	: word count `s(tinexog)'
-dis "nendog is `nendog'"
 
 * Count modified to include constant if appropriate
 	local ninexog	= `ninexog' + `s(cons)'
@@ -3124,14 +3090,14 @@ di as err "error - misspecified weights"
 * `clustvar' = "`clustvar1' `clustvar2'"
 	//local iid = ("`s(robust)'`s(cluster)'`s(kernel)'"=="")
 	local iid = 0
-	dis "iid is `iid' always set to 0 for syntax reason - no longer supports tests under homo assumption CHANGE"
+	//dis "iid is `iid' always set to 0 for syntax reason - no longer supports tests under homo assumption"
 	if "`s(cluster)'`s(bw)'`s(kernel)'"=="" {
 		local vceopt "robust" 
 	} 
 	else {
 		local vceopt "`s(robust)' `s(cluster)' bw(`s(bw)') kernel(`s(kernel)') `s(psd)'"
 	}
-	dis "vceopt is `vceopt' default use robust avar for test statistics - only consider heteroskedasticity for now - CHANGE"
+	//dis "vceopt is `vceopt' default use robust avar for test statistics - only consider heteroskedasticity for now - CHANGE"
 * Assemble notes for table output
 	//if `iid' { // Forces to display tests robust to heteroskedasticity
 	//	//local note1 "Tests assume i.i.d. errors."
@@ -5193,7 +5159,7 @@ program define computematrices_iid, rclass
 			]
 	tempname pi_z bhat AA zz zzinv var_pi_z var_del del_z del_v ehat
 	tempname syy see sxx sxy syv svv sve sxe
-dis "change lm to md: ntinexog `ntinexog'"
+//change lm to md: ntinexog `ntinexog'"
 local lm = 0
 	local N = `nobs'
 			
@@ -5244,7 +5210,7 @@ local lm = 0
 *		matrix `sxe'	= `AA'[`rc1'..`rc2',2..2] * 1/(`N'-`dofminus') * `ssa'		//  same as sve
 	}
 	else {				
-	dis "dofminus is `dofminus' ssa is `ssa'"															//  need only svv for Wald/MD version
+																//  need only svv for Wald/MD version
 		qui mat accum `AA' = `Vhat' if `touse' `wtexp', noconstant
 		mat `svv' = `AA'  * 1/(`N'-`dofminus') * `ssa'								//  so same dfn as with LM version
 	}
@@ -5326,7 +5292,7 @@ program define computematrices_robust, rclass
 timer on 5		
 	tempname pi_z bhat uhat zz zzinv del_z var_pi_z var_del var_pidel_z
 	tempname S S11 S12 S22
-dis "change lm to md"
+//change lm to md"
 local lm = 0
 	local N = `nobs'
 
@@ -5561,7 +5527,7 @@ timer on 4
 						wvar(`wvar')				///
 						wf(`wf')					///
 						forcerobust(`forcerobust')
-dis "end of quiet"						
+//dis "end of quiet"						
 *}
 * Finish up
 		return scalar npd		= `npd'					//  flag to indicate NPD matrices encountered
@@ -5628,7 +5594,6 @@ dis "end of quiet"
 		mata: rseed(`oldseed')	
 		mata: mata drop `a_max' `a_col' `lc_sim' `oldseed' `m' 
 	}
-	dis "end of construct_citable"
 timer off 4
 end		// end construct_citable
 
@@ -5710,7 +5675,7 @@ timer on 3
 
 * npd is flag set to 1 if npd matrices encountered
 	local npd = 0
-dis "gridlist is `gridlist'"
+
 	tokenize "`gridlist'", parse("|")
 	local this			"`1'"				//  this gridlist, i.e., a numlist
 	macro shift								//  the separator
@@ -5718,7 +5683,7 @@ dis "gridlist is `gridlist'"
 	local rest			"`*'"
 	local rest			: list clean rest
 	local moregrids		: length local rest
-dis "gridcols is `gridcols'"
+
 
 	foreach null in `this' {				//  loop through points of this gridlist
 	
@@ -5995,7 +5960,7 @@ timer off 10
 				local k_2sls		=r(k_2sls)
 				local lc_2sls		=r(lc_2sls)	
 				local ar_chi2		=r(ar_chi2) // need k_2sls and ar_chi2 to calculate a_min	
-				dis "k_2sls is `k_2sls' lc_2sls is `lc_2sls' ar_chi2 is `ar_chi2'"	
+				//dis "k_2sls is `k_2sls' lc_2sls is `lc_2sls' ar_chi2 is `ar_chi2'"	
 			}
 			if strpos("`gridcols'", "lc_r") { // use lc_2sls_r in case lc_2sls picks up the projection test statistics
 				local k_chi2		=r(k_chi2)
@@ -6038,7 +6003,7 @@ timer off 10
 				*matlist `kp'
 			}
 
-dis "gridcols is `gridcols'"
+
 * calculate test statistics, p-values, and rejection indicators from above matrices
 			compute_pvals,					///
 				gridcols(`gridcols')			///
@@ -6087,7 +6052,7 @@ dis "gridcols is `gridcols'"
 			if strpos("`gridcols'", "lc_2sls_r") {
 				local k_2sls_r			=r(k_2sls_r)
 				local lc_2sls_r			=r(lc_2sls_r)
-				dis "wald_chi2 is `wald_chi2'"
+				
 				local a_diff_f= (`invchi2_k_df'-`k_2sls')/`ar_chi2'*cond(`wald_chi2'>`invchi2_k_df',1,0)
 				// record a_diff for each grid to calculate a_max at the end of grid recurse
 			}
@@ -6095,7 +6060,6 @@ dis "gridcols is `gridcols'"
 				local lc_r			=r(lc_r)
 				local a_diff_f= (`invchi2_k_df'-`k_chi2')/`ar_chi2'*cond(`wald_chi2'>`invchi2_k_df',1,0)
 				// record a_diff for each grid to calculate a_max at the end of grid recurse
-				dis "lc_r is `lc_r', k_chi2 is `k_chi2' ar_chi2 is `ar_chi2' wald_chi2 is `wald_chi2' a_diff_f is `a_diff_f'"
 
 			}
 			if strpos("`gridcols'", " j_p") {
@@ -6111,8 +6075,7 @@ dis "gridcols is `gridcols'"
 				forvalues i=1/`nwendog' {
 					local k_2slsp`i'_r = r(k_2slsp`i'_r)
 					local lc_2slsp`i'_r = r(lc_2slsp`i'_r)
-					dis "wald_chi2p"
-					matrix list `wald_chi2p'
+					
 					// and record a_diff for each projection test - need to return k_2slsp and calculate invchi2_1_df
 					local a_diffp`i'= (`invchi2_1_df'-`k_2slsp'[1,`i'])/`ar_chi2'*cond(`wald_chi2p'[1,`i']>`invchi2_1_df',1,0)
 				}		
@@ -6123,8 +6086,7 @@ dis "gridcols is `gridcols'"
 				forvalues i=1/`nwendog' {
 					local kp`i'_r = r(kp`i'_r)
 					local lcp`i'_r = r(lcp`i'_r)
-					dis "wald_chi2p"
-					matrix list `wald_chi2p'
+					
 					// and record a_diff for each projection test - need to return k_chi2p and calculate invchi2_1_df
 					local a_diffp`i'= (`invchi2_1_df'-`k_chi2p'[1,`i'])/`ar_chi2'*cond(`wald_chi2p'[1,`i']>`invchi2_1_df',1,0)
 				}		
@@ -6135,12 +6097,12 @@ timer on 8
 			local gridcols_temp ""
 			foreach gc in `gridcols' {
 				local gridcols_temp "`gridcols_temp' ``gc''"
-				dis "`gc' is ``gc''"
+				
 			}
 			// gridcols is a nested local macro, containing test stats locals.
 			// save all test stats in a local first and directly convert to mata is much faster
 			// add gridnullvector to the first column and a_diff the last column
-dis "gridcols_temp is `gridcols_temp'"
+//dis "gridcols_temp is `gridcols_temp'"
 			mata: `cirow' = `gridnullvector', strtoreal(tokens(st_local("gridcols_temp")))
 
 timer off 8
@@ -6163,7 +6125,7 @@ timer off 7
 	return scalar npd		=`npd'
 	return local counter	=`counter'
 timer off 3
-timer list
+//timer list
 timer clear
 end // end of grid_recurse
 
@@ -6199,8 +6161,8 @@ program define construct_pcitable, rclass
 			local lc_cols 	"`lc_cols' `testcol'"
 		}
 	}
-	dis "ptestlist is `ptestlist' testlist is `testlist' cnames is `cnames'"
-	dis "lc_cols is `lc_cols' gridcols is `gridcols'"
+	//dis "ptestlist is `ptestlist' testlist is `testlist' cnames is `cnames'"
+	//dis "lc_cols is `lc_cols' gridcols is `gridcols'"
 	tempname p											//  name to use for pointer
 	mata: `p' = &`citable'								//  pointer to Mata matrix (CI table)
 
@@ -6273,12 +6235,10 @@ real matrix collapse_citable(									///
 							)
 {
 	
-	lc_col			=strtoreal(tokens(lc_cols))
+	lc_col			=strtoreal(tokens(lc_cols)) // 0 is the case that only AR test is listed - eventually do AR with rejection, too?
 	gridcols		=strtoreal(tokens(colsvec))
 	levels			=strtoreal(tokens(levelsvec))
-printf("lc_col is %9.0g",lc_col[1,1]) // 0 is the case that only AR test is listed - eventually do AR with rejection, too?
-printf("gridcols is")
-gridcols
+
 	rtable			= (100*(*p)[.,gridcols]) :< (100 :- levels)
 	if (lc_col[1,1]>0) {
 		rtable			= (*p)[.,1], rtable, (*p)[., lc_col]
@@ -6286,8 +6246,7 @@ gridcols
 	else {
 		rtable			= (*p)[.,1], rtable
 	}
-printf("raw rejection table")	
-rtable	
+
 	//  append column 1 with grid nulls and last column lc_2sls_r, if lc_2sls is included in citestlist
 	smat1			= rowsum(rtable[.,2..cols(rtable)])
 	if (rows(smat1)>1) {
@@ -6298,7 +6257,7 @@ rtable
 		rtable			= select(rtable,smat)
 	}
 	// if only one row of rtable, then keep the entire table
-rtable
+
 	return(rtable)
 }
 end
@@ -6312,11 +6271,8 @@ real matrix collapse_pcitable(									///
 {
 	
 	gridcols		=strtoreal(tokens(colsvec))
-printf("point has row %9.0g",rows((*p)))
-(*p)
 	smat1			= rowsum((*p)[.,2..cols(*p)])
-printf("smat1 has row %9.0g",rows(smat1)) // if only one grid point, then need toskip 
-smat1
+
 	if (rows(smat1)>1) {
 		smat2			= smat1[(2::rows(smat1)),1]
 		smat1			= smat1[(1::rows(smat1)-1),1]
@@ -6366,12 +6322,10 @@ program get_ci_from_table, rclass
 			local testcol		: list posof "`test'_r" in cnames	//  table has rejections, hence "_r"
 		 	local gridcols		"`gridcols' `testcol'"
 		}
-		dis "hasrejections gridcols is `gridcols'"
 		mata: `rtable' = collapse_pcitable(`p', "`gridcols'")		//  create table of rejections and collapse (delete unneeded rows)
 		mata: st_matrix("`rtable'",`rtable')						//  copy from Mata into Stata
 		mat colnames `rtable'	=`rtcnames'							//  and name columns
-		mata: mata drop `rtable'
-		mat list `rtable'									//  don't need Mata version of rejections table
+		mata: mata drop `rtable'									//  don't need Mata version of rejections table
 	}
 	else {
 		//  original CI table with p-values besides lc_2sls, so need to calc rejections
@@ -6396,8 +6350,8 @@ program get_ci_from_table, rclass
 		if "`lc_cols'" == "" { // if none of the rejection test is on the list (i.e. only AR test), then set to 0
 			local lc_cols 		"0"
 			}
-		dis "rtestlist `rtestlist' testlist is 	`testlist'"
-		dis "lc_cols is `lc_cols' gridcols is `gridcols'"
+		//dis "rtestlist `rtestlist' testlist is 	`testlist'"
+		//dis "lc_cols is `lc_cols' gridcols is `gridcols'"
 		
 		mata: `rtable' = collapse_citable(`p', "`lc_cols'", "`gridcols'", "`testlevels'")	//  create table of rejections and collapse
 																				//  (delete unnecessary rows)
@@ -6542,7 +6496,14 @@ program compute_a_min, rclass
 // The first column is alpha, the second column is gamma
 // The third column p and the fourth column is k
 // The fifth column returns the a_min and the sixth column returns lc_crit
-	
+	if `k_df'>5 {
+		di as err "Error: number of weakly-identified regressors (`k_df') is greater than 5 - need to tabulate a_min."
+				exit 198
+	}	
+	if `nexexog'>50 {
+		di as err "Error: number of instruments (`nexexog') is greater than 50 - need to tabulate a_min."
+				exit 198
+	}	
 	mata:`basepath'=J(1,1,"")
 	mata:pathsplit(findfile("twostepweakiv.ado"),`basepath',"")
 	mata:st_local("a_minpath",pathjoin(`basepath',"a_min.txt"))
@@ -6554,6 +6515,7 @@ program compute_a_min, rclass
 		file read `fh' line	
 	}
 	tokenize `line', parse(" ")
+
 	return local a_min = `5'
 	return local lc_crit = `6'	
 	file close `fh'
@@ -6632,10 +6594,7 @@ timer_on(1)
 		wnullvector		=wnullvector'
 
 		r = del_z - pi_z*nullvector
-		printf("del_z and pi_z and r is")
-		del_z
-		pi_z
-		r
+
 // Assemble psi
 		//if (iid) {
 		//	kron		= (del_v - nullvector)#I(nexexog)
@@ -6647,11 +6606,11 @@ timer_on(1)
 		// }
 		//else {
 			kron		= (nullvector#I(nexexog))
-			printf("kron is")
-			kron
+			//printf("kron is")
+			//kron
 			psi			= var_del - kron'*var_pidel_z - (kron'*var_pidel_z)' + kron' * var_pi_z * kron
-			printf("here psi is")
-			psi
+			//printf("here psi is")
+			//psi
 			_makesymmetric(psi)
 			psi_inv		= invsym(psi)
 			bracket		= var_pidel_z - var_pi_z*kron
@@ -6764,8 +6723,6 @@ timer_on(1)
 		}
 
 		if (strpos(gridcols, "lc_2sls_r")|strpos(gridcols, "k_2sls_r")) {
-printf("dimension of meat %9.0g %9.0g",rows(meat),cols(meat))
-printf("dimension of bread %9.0g %9.0g",rows(bread),cols(bread))
 
 // See documentation on what meat and bread are
 			aux7 = cholsolve(meat,bread')
@@ -6773,7 +6730,7 @@ printf("dimension of bread %9.0g %9.0g",rows(bread),cols(bread))
 				npd = 1
 				aux7 = qrsolve(meat,bread')
 			}
-														printf("here")
+
 
 			// Store k_2sls (K stat with 2sls in place of efficient weight matrix
 			k_2sls			= bread * aux7
@@ -6793,10 +6750,8 @@ printf("dimension of bread %9.0g %9.0g",rows(bread),cols(bread))
 				k_2slsp[1,i]=(1/meat[i,i])*bread[1,i]*bread[1,i]
 				lc_2slsp[1,i]= k_2slsp[1,i] + a_min_p*ar_chi2
 			}
-			printf("lc_2slsp and k_2slsp and ar_chi2 are")
-			lc_2slsp
-			k_2slsp
-			ar_chi2
+			//printf("lc_2slsp and k_2slsp and ar_chi2 are")
+
 			st_matrix("r(lc_2slsp)", lc_2slsp)
 			st_matrix("r(k_2slsp)", k_2slsp)
 		}
@@ -6819,10 +6774,7 @@ printf("dimension of bread %9.0g %9.0g",rows(bread),cols(bread))
 				k_chi2p[1,i]=(1/dwd[i,i])*bread[1,i]*bread[1,i]
 				lcp[1,i]= k_chi2p[1,i] + a_min_p*ar_chi2
 			}
-			printf("lcp and k_chi2p and ar_chi2 are")
-			lcp
-			k_chi2p
-			ar_chi2
+			//printf("lcp and k_chi2p and ar_chi2 are")
 			st_matrix("r(lcp)", lcp)
 			st_matrix("r(k_chi2p)", k_chi2p)
 		}
@@ -6872,13 +6824,12 @@ program get_strong_beta, rclass
 
 	tempname S npd
 	tempvar y0 ehat var_beta 
-dis "iv `iv' md2s `md2s' liml `liml' cue `cue'"
+//dis "iv `iv' md2s `md2s' liml `liml' cue `cue'"
 local varflag = "`varflag'"~="" // it looks like varflag is only for 2sls beta, otw y0 is generated twice in this program
 	if `varflag' & "`liml'`md2s'`cue'"==""{
 
 		tempname pi_z bhat uhat  del_z var_pi_z var_del var_pidel_z // take out zz and zzinv tempname because program syntax specifies
 		tempname S S11 S12 S22 
-			dis "wendo is `wendo'"	
 
 		qui gen double `y0' = `depvar' if `touse'			//  calc y0 = y at hypoth null; also used by CUE
 		local i=1
@@ -6941,8 +6892,8 @@ local varflag = "`varflag'"~="" // it looks like varflag is only for 2sls beta, 
 			return mat pi2hat		= `pi2hat'						//  return RF matrix for later use
 		}
 		mat `sbeta'				= r(beta)							//  col vector (Mata convention)
-		dis "initial sbeta"						//  strong IV beta at specified null
-		mat list `sbeta'
+							//  strong IV beta at specified null
+		
 		mat `sbeta'				= `sbeta''	//  row vector (Stata convention)
 		return mat sbeta		= `sbeta'	
 		scalar `npd'			= r(npd)
@@ -6956,22 +6907,20 @@ local varflag = "`varflag'"~="" // it looks like varflag is only for 2sls beta, 
 			mata: pi_z			=st_matrix("r(pi_z)")
 			mata: var_pi_z		=st_matrix("r(var_pi_z)")
 			mata: var_pidel_z	=st_matrix("r(var_pidel_z)")
-			dis "hi"
+			
 
 			mata: zz		= st_matrix("`zz'")
 			mata: kron		= (beta#I(`nexexog'))
-			mata: kron
-			mata: var_del
+			//mata: kron
+			//mata: var_del
 			mata: psi		= var_del - kron' * var_pidel_z - (kron' * var_pidel_z)' ///
 						+ kron' * var_pi_z* kron
-			dis "hi"
+			
 			mata: _makesymmetric(psi)
 			mata: aux1		= psi * zz
 			mata: aux2		= invsym(pi_z' * zz * pi_z)
 			mata: var_beta	= aux2 * pi_z' * zz * aux1 * pi_z * aux2
-			mata: printf("size of 2SLS VCV is %9.0g %9.0g",cols(var_beta),rows(var_beta))
-			mata: printf("2SLS is %17.0g",beta[1,1])
-			mata: printf("variance is %17.0g",var_beta[1,1])
+
 			mata: st_matrix("r(var_beta)", var_beta)
 
 		mat `var_beta'				= r(var_beta)
@@ -7019,7 +6968,7 @@ local varflag = "`varflag'"~="" // it looks like varflag is only for 2sls beta, 
 		mat `pi_z'			= r(pi_z)
 		mat `var_del'		= r(var_del)
 		mat `var_pidel_z'	= r(var_pidel_z)
-dis "use CUE-MD for LIML so also need sbeta"
+//use CUE-MD for LIML so also need sbeta"
 
 		mata: s_cue_beta(							///
 								`nobs',				///
@@ -7047,20 +6996,13 @@ dis "use CUE-MD for LIML so also need sbeta"
 			mata: zzinv		= st_matrix("r(zzinv)")
 			mata: zz		= invsym(zzinv)
 			mata: kron		= (beta#I(`nexexog'))
-			mata: kron
-			mata: var_del
 			mata: psi		= var_del - kron' * var_pidel_z - (kron' * var_pidel_z)' ///
 						+ kron' * var_pi_z* kron
-			dis "hi!"
+			
 			mata: _makesymmetric(psi)
-			mata: psi
-			mata: zz
 			mata: aux1		= psi * zz
 			mata: aux2		= invsym(pi_z' * zz * pi_z)
 			mata: var_beta	= aux2 * pi_z' * zz * aux1 * pi_z * aux2
-			mata: printf("size of LMIL VCV is %9.0g %9.0g",cols(var_beta),rows(var_beta))
-			mata: printf("LIML is %17.0g",beta[1,1])
-			mata: printf("variance is %17.0g",var_beta[1,1])
 			mata: st_matrix("r(var_beta)", var_beta)
 					mat `var_beta'				= r(var_beta)
 					return mat var_beta			= `var_beta'				// VCV for LIML beta - only calculated when LIML point estimates are specified
@@ -7128,7 +7070,7 @@ dis "use CUE-MD for LIML so also need sbeta"
 	
 	if "`cue'"~="" {							//  CUE estimation
 										//  note 1st-step sbeta is provide
-dis "changed s_cue_beta to MD version"
+//dis "changed s_cue_beta to MD version"
 		mata: s_cue_beta(							///
 								`nobs',				///
 								`nexexog',		/// number of instruments
@@ -7209,11 +7151,8 @@ void s_md2s_beta(										///
 			npd = 1
 		}
 		var_beta = invsym(pi_z'*aux3)
-		printf("size of MD2s VCV is %9.0g %9.0g",cols(var_beta),rows(var_beta))
-		printf("MD2s is")
-		beta
-		printf("variance is")
-		var_beta
+		//printf("MD2s beta is")
+		//printf("variance var_beta is")
 
 		st_matrix("r(var_beta)",var_beta)
 
@@ -7253,7 +7192,6 @@ void s_iv_beta(											///
 		QZX1		= st_matrix(ZX1_name)/N
 		QZX2		= st_matrix(ZX2_name)/N
 		QZy			= st_matrix(Zy_name)/N
-		printf("here %9.0g",rows(QZZ))
 
 		aux1		= cholsolve(QZZ, QZX2)
 		if (aux1[1,1]==.) {
@@ -7440,7 +7378,7 @@ void s_cue_beta(										///
 
 // Declare cuestruct
 	struct ms_cuestruct scalar cuestruct
-printf("here")
+
 // Scalars
 	cuestruct.N	= N
 	cuestruct.nexexog	= nexexog
@@ -7487,9 +7425,7 @@ printf("here")
 		st_numscalar("r(npd)",1)
 	}
 	var_beta	= invsym(cuestruct.pi_z' * aux1)
-printf("size of CUE VCV is %9.0g %9.0g",cols(var_beta),rows(var_beta))
-printf("cue is %17.0g",beta[1,1])
-printf("variance is %17.0g",var_beta[1,1])
+
 	st_matrix("r(var_beta)", var_beta)
 	
 }
@@ -7594,10 +7530,8 @@ void s_wald(									///
 
 // Wald test
 	rwald = beta - b0
-	printf("var_wbeta might have dimension error")
-	var_wbeta
-	beta
-	b0
+	//printf("var_wbeta might have dimension error")
+
 	if (lc_col >0){	
 		aux0 = cholsolve(var_wbeta,rwald)
 		if (aux0[1,1]==.) {
@@ -7918,7 +7852,6 @@ timer on 2
 			local lcp`i'_r= cond(`lcp'[1,`i']>`lc_crit_p'	,1,0)
 			return scalar lcp`i'_r= `lcp`i'_r'
 			if (strpos("`gridcols'", "kp")) {
-				dis "1,1 invalid name is probably here - lc and k need to be separately"
 				local kp`i'_r= cond(`kp'[1,`i']>`invchi2_1_df'    ,1,0)
 				return scalar kp`i'_r= `kp`i'_r'
 			}
