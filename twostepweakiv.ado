@@ -6498,11 +6498,9 @@ program compute_a_min, rclass
 // The fifth column returns the a_min and the sixth column returns lc_crit
 	if `k_df'>5 {
 		di as err "Error: number of weakly-identified regressors (`k_df') is greater than 5 - need to tabulate a_min."
-				exit 198
 	}	
 	if `nexexog'>50 {
 		di as err "Error: number of instruments (`nexexog') is greater than 50 - need to tabulate a_min."
-				exit 198
 	}	
 	mata:`basepath'=J(1,1,"")
 	mata:pathsplit(findfile("twostepweakiv.ado"),`basepath',"")
@@ -6514,8 +6512,8 @@ program compute_a_min, rclass
 	while `=word("`line'",1)'!=`a'|`=word("`line'",2)'!=`g'|`=word("`line'",3)'!=`k_df'|`=word("`line'",4)'!=`nexexog' {
 		file read `fh' line	
 	}
-	tokenize `line', parse(" ")
 
+	tokenize `line', parse(" ")
 	return local a_min = `5'
 	return local lc_crit = `6'	
 	file close `fh'
@@ -6606,11 +6604,9 @@ timer_on(1)
 		// }
 		//else {
 			kron		= (nullvector#I(nexexog))
-			//printf("kron is")
-			//kron
+
 			psi			= var_del - kron'*var_pidel_z - (kron'*var_pidel_z)' + kron' * var_pi_z * kron
-			//printf("here psi is")
-			//psi
+
 			_makesymmetric(psi)
 			psi_inv		= invsym(psi)
 			bracket		= var_pidel_z - var_pi_z*kron
@@ -6661,7 +6657,7 @@ timer_on(1)
 				npd = 1
 				aux6 = qrsolve(pi_beta'*aux5,pi_beta')
 			}
-			
+
 			k_chi2 = r' * aux5 * aux6 * aux1
 			if (k_chi2[1,1]<0) {								//  can happen if matrices are npd
 				k_chi2[1,1]=.
@@ -6720,6 +6716,8 @@ timer_on(1)
 			dwd			=invsym(pi_beta'*zz* pi_beta)
 			bread 			=r'*zz* pi_beta *dwd
 			meat			= dwd *aux4 * dwd
+
+
 		}
 
 		if (strpos(gridcols, "lc_2sls_r")|strpos(gridcols, "k_2sls_r")) {
@@ -6736,6 +6734,9 @@ timer_on(1)
 			k_2sls			= bread * aux7
 			// Calculate the linear combination test statistic
 			lc_2sls			= k_2sls + a_min*ar_chi2
+			//printf("lc_2sls and k_2sls are")
+			//lc_2sls
+			//k_2sls
 			st_numscalar("r(k_2sls)",k_2sls[1,1])
 			st_numscalar("r(lc_2sls)",lc_2sls[1,1])
 		}
@@ -6759,6 +6760,9 @@ timer_on(1)
 		if (strpos(gridcols, "lc_r")) {
 			// Calculate the linear combination test statistic
 			lc			= k_chi2 + a_min*ar_chi2
+			//printf("lc and k_chi2 are")
+			//lc
+			//k_chi2
 			st_numscalar("r(k_chi2)", k_chi2[1,1])
 			st_numscalar("r(lc)",lc[1,1])
 		}

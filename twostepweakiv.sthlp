@@ -94,14 +94,6 @@ over which to calculate the confidence sets;
 The default number of gridpoints is
 100, 25, 11, 7 and 5
 for the cases of 1, 2, 3, 4 and 5 endogenous regressors, respectively.
-If more than 5 endogenous regressors are specified,
-the number of gridpoints must be explicitly provided by the user,
-e.g., for 6 endogenous regressors the user can specify {cmd:gridpoints(5 5 5 5 5 5)}.
-The number of gridpoints can get easily get large in this case;
-in this example, the total number of grid points searched is 5^6 = 15,625.
-A large number of grid points will increase the required computation time,
-but a greater number of grid points
-will improve the precision of both graphs and confidence sets.
 For testing a point null hypothesis e.g. 0, set grid point to 1 and gridmin=gridmax=0.
 {p_end}
 {synopt:{opt gridmult(#)}}
@@ -127,13 +119,14 @@ and include them in grid.
 confidence level as a percentage (same for all tests performed); 
 The default is {cmd:level(95)} for size 5% tests; if specified, {cmd:level(#)} 
 has to be one of  99, 98, 95, 90, 85, or 80 because weights used in {it: LC} and {it:  LC_2sls } tests
-are pre-tabulated only for these values.
+are pre-tabulated only for these values. For other values, see {cmd: gammalevel(#)}.
 {p_end}
 {synopt:{opt gammalevel(#)}}
 distortion level for two-step confidence sets based on {it:LC} or {it:LC_2sls} test as a percentage;
 The default is {cmd:gammalevel(5)} for a 5% coverage distortion; if specified, 
 {cmd: gammalevel(#)} has to be one of 1, 2, 5, 10, 15, or 20 because weights used in {it: LC} and {it:  LC_2sls } tests
-are pre-tabulated only for these values. See Andrews (forthcoming) for more details on {cmd: gammalevel(#)}.
+are pre-tabulated only for these values. See Andrews (forthcoming) for more details on {cmd: gammalevel(#)}. 
+For other values of levels and/or number of parameters, see sj article for instructions to tabulate them.
 {p_end}
 {synoptline}
 {p2colreset}{...}
@@ -471,18 +464,18 @@ estimator with bandwidth equal to 3.{p_end}
 {synoptset 16 tabbed}{...}
 {p2col 5 16 20 2: Matrices}{p_end}
 {synopt:{cmd:e(citable)}}table with test statistics, p-values, and rejection
-indicators for every grid point over which hypotheses were tested.
-If {opt strong(.)} was used, the estimated coefficients
+indicators for every grid point over which hypotheses are tested.
+If {opt strong(.)} is used, the estimated coefficients
 for the strongly-identified regressors are also recorded.{p_end}
 {synopt:{cmd:e(pxxcitable)}}grid table with rejection indicators
 for projection-based inference;
 xx will be 1 or 2 numbers corresponding to the endogenous regressor(s){p_end}
 {synopt:{cmd:e(F)}}first stage F statistics for all endogenous regressors.{p_end}
 {synopt:{cmd:e(wbeta)}}weakly-identified coefficients from IV model used for Wald tests{p_end}
-{synopt:{cmd:e(var_wbeta)}}VCV from IV model used for Wald tests{p_end}
-{synopt:{cmd:e(sbeta)}}if {opt strong(.)} was used, estimated strongly-identified coefficients at null{p_end}
+{synopt:{cmd:e(var_wbeta)}}VCE from IV model used for Wald tests{p_end}
+{synopt:{cmd:e(sbeta)}}if {opt strong(.)} is used, estimated strongly-identified coefficients at null{p_end}
 {synopt:{cmd:e(ebeta)}}Wald point estimates for full set of endogenous regressors{p_end}
-{synopt:{cmd:e(cuebeta)}}if {opt cuepoint} was used, CUE point estimates for full set of endogenous regressors{p_end}
+{synopt:{cmd:e(cuebeta)}}if {opt cuepoint} is used, CUE point estimates for full set of endogenous regressors{p_end}
 {p2colreset}{...}
 
 
@@ -653,7 +646,7 @@ for instrumental-variable (IV) estimation of linear models.
 
 {title:Author}
 
-	Liyang (Sophie) Sun, MIT, USA
+	Liyang Sun, MIT, USA
 	lsun20@mit.edu
 
 
