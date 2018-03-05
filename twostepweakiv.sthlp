@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 2.4.02  9feb2015}{...}
+{* *! version 1.1.01  9feb2018}{...}
 {cmd:help twostepweakiv}
 {hline}
 
@@ -83,19 +83,11 @@ for {opt 2sls} and {opt liml} estimators; and Wald and
 
 {pmore} {bf:Note:} The default grid is centered around the Wald point estimate
 (or the CUE point estimate if the {opt cuepoint} estimate is specified)
-with a width equal to twice the Wald confidence interval.
-With weak instruments,
-this may often be too small a grid to estimate the confidence sets and sets.
+with a width equal to five times the Wald confidence interval.
+With weak/strong instruments,
+this may often be too small/large a grid to estimate the confidence sets.
 {p_end}
 
-{synopt:{opt gridpoints(numlist)}}
-number(s) of equally spaced grid points (in dimensions corresponding to endogenous regressors)
-over which to calculate the confidence sets;
-The default number of gridpoints is
-100, 25, 11, 7 and 5
-for the cases of 1, 2, 3, 4 and 5 endogenous regressors, respectively.
-For testing a point null hypothesis e.g. 0, set grid point to 1 and gridmin=gridmax=0.
-{p_end}
 {synopt:{opt gridmult(#)}}
 multiplier of Wald confidence-interval for grid. The default is {cmd:gridmult(2)}.
 {p_end}
@@ -104,6 +96,14 @@ lower limit(s) for grid search (in dimensions corresponding to endogenous regres
 {p_end}
 {synopt:{opt gridmax(numlist)}}
 upper limit(s) for grid search (in dimensions corresponding to endogenous regressors).
+{p_end}
+{synopt:{opt gridpoints(numlist)}}
+number(s) of equally spaced grid points (in dimensions corresponding to endogenous regressors)
+over which to calculate the confidence sets;
+The default number of gridpoints is
+100, 25, 11, 7 and 5
+for the cases of 1, 2, 3, 4 and 5 endogenous regressors, respectively.
+For testing a point null hypothesis e.g. 0, set grid point to 1 and gridmin=gridmax=0.
 {p_end}
 {synopt:{opt cuepoint}}
 report {opt cue} point estimates for weakly-identified endogenous regressors
@@ -118,15 +118,14 @@ and include them in grid.
 {synopt:{opt level(#)}}
 confidence level as a percentage (same for all tests performed); 
 The default is {cmd:level(95)} for size 5% tests; if specified, {cmd:level(#)} 
-has to be one of  99, 98, 95, 90, 85, or 80 because weights used in {it: LC} and {it:  LC_2sls } tests
+with values 99, 95 or 90 allows for faster computation because weights used in {it: LC} and {it:  LC_2sls } tests
 are pre-tabulated only for these values. For other values, see {cmd: gammalevel(#)}.
 {p_end}
 {synopt:{opt gammalevel(#)}}
 distortion level for two-step confidence sets based on {it:LC} or {it:LC_2sls} test as a percentage;
 The default is {cmd:gammalevel(5)} for a 5% coverage distortion; if specified, 
-{cmd: gammalevel(#)} has to be one of 1, 2, 5, 10, 15, or 20 because weights used in {it: LC} and {it:  LC_2sls } tests
-are pre-tabulated only for these values. See Andrews (forthcoming) for more details on {cmd: gammalevel(#)}. 
-For other values of levels and/or number of parameters, see sj article for instructions to tabulate them.
+{cmd: gammalevel(#)} with values 1, 2, 5, 10, 15, or 20 allows for faster computation because weights used in {it: LC} and {it:  LC_2sls } tests
+are pre-tabulated only for these values. For values not pre-tabulated, we include simulation code to calculate the corresponding weights and critical values, which can be slow.
 {p_end}
 {synoptline}
 {p2colreset}{...}
@@ -444,21 +443,18 @@ estimator with bandwidth equal to 3.{p_end}
 {synopt:{cmd:e(lc_cset)}}confidence set based on LC or LC_2sls test{p_end}
 {synopt:{cmd:e(pxx_yy_cset)}}as above, projection-based confidence set for variable xx, test yy{p_end}
 {synopt:{cmd:e(inexog)}}list of exogenous regressors (excluding any included in the tests){p_end}
-{synopt:{cmd:e(tinexog)}}list of any exogenous regressors included in tests ({opt testexog(.)} option){p_end}
 {synopt:{cmd:e(exexog)}}list of excluded instruments{p_end}
 {synopt:{cmd:e(depvar)}}dependent variable{p_end}
 {synopt:{cmd:e(endo)}}endogenous variable(s){p_end}
-{synopt:{cmd:e(wendo)}}weakly-identified endogenous{p_end}
-{synopt:{cmd:e(sendo)}}strongly-identified endogenous{p_end}
-{synopt:{cmd:e(csendo)}}if subset-AR test reported, endogenous {it:excluded} from the subset{p_end}
+{synopt:{cmd:e(wendo)}}weakly-identified endogenous variable(s){p_end}
+{synopt:{cmd:e(sendo)}}strongly-identified endogenous variable(s){p_end}
 {synopt:{cmd:e(pwendo)}}endogenous vars with projection-based confidence sets{p_end}
 {synopt:{cmd:e(pwendo_nlist)}}corresponding numbers for e(pwendo); used to identify projection-based confidence sets in e(.) (see above){p_end}
 {synopt:{cmd:e(gridpoints)}}list of grid points in each dimension{p_end}
-{synopt:{cmd:e(model)}}{it:linear IV}, {it:IV probit} or {it:IV tobit}{p_end}
-{synopt:{cmd:e(waldcmd)}}{it:iv_command} used to estimate standard IV model: {it:ivregress}, {it:ivreg2}, {it:ivreg2h},
-{it:xtivreg}, {it:xtivreg2}, {it:xtabond2}, {it:ivprobit}, or {it:ivtobit}{p_end}
+{synopt:{cmd:e(model)}}{it:linear IV}{p_end}
+{synopt:{cmd:e(waldcmd)}}{it:iv_command} estimator used to estimate standard IV model: {it:2sls}, {it:md2s},{it:liml} or {it:cue}{p_end}
 {synopt:{cmd:e(level)}}default confidence level in percent used for tests of null = 100*(1-alpha){p_end}
-{synopt:{cmd:e(method)}}lm or md{p_end}
+{synopt:{cmd:e(method)}} md{p_end}
 {synopt:{cmd:e(cmd)}}twostepweakiv{p_end}
 
 {synoptset 16 tabbed}{...}
