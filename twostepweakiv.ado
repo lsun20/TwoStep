@@ -2018,28 +2018,14 @@ program define display_output
 	local level_wald	: di %2.0f e(wald_level) "%"
 
 * CI text (full confidence sets table)
-	local ci_clr		: di " {c |}{center 15:`level_clr'}{res}{center 22:`e(clr_cset)'}"
-	local ci_ar		: di " {c |}{center 15:`level_ar'}{res}{center 22:`e(ar_cset)'}"
-	local ci_k		: di " {c |}{center 15:`level_k'}{res}{center 22:`e(k_cset)'}"
-	local ci_k_2sls		: di " {c |}{center 15:`level_k_2sls'}{res}{center 22:`e(k_2sls_cset)'}"
-	local ci_lc_2sls	: di " {c |}{center 15:`level_lc_2sls'}{res}{center 22:`e(lc_2sls_cset)'}"
-	local ci_lc			: di " {c |}{center 15:`level_lc'}{res}{center 22:`e(lc_cset)'}"
-	local ci_wald		: di " {c |}{center 15:`level_wald'}{res}{center 22:`e(wald_cset)'}"
-	if ~e(closedform) {
-		local ci_kj			: di " {c |}{center 15:`level_kj'}{res}{center 22:`e(kj_cset)'}"
-		local ci_j			: di " {c |}{center 15:`level_j'}{res}{center 22:`e(j_cset)'}"
-	}
-	else {
-		local ci_kj			: di " {c |}{center 15:`level_kj'}{res}{center 22:(*)}"
-		local ci_j			: di " {c |}{center 15:`level_j'}{res}{center 22:(*)}"
-	}
+
 	foreach testname in clr ar k k_2sls lc_2sls lc j kj wald {
 	
 		local cset		"`e(`testname'_cset)'"
 		local csetlen	: length local cset
-		if `csetlen' <= 22 {
-* Fits so center it in a line of 22 chars (78-56=22 = what's left from default of 78)
-			local ci_`testname'		: di " {center 15:`level_`testname''}{res}{center 22:`e(`testname'_cset)'}"
+		if `csetlen' <= 56 {
+* Fits so center it in a line of 22 chars (78-22=56 = what's left from default of 78)
+			local ci_`testname'		: di " {center 15:`level_`testname''}{res}{lalign 22:`e(`testname'_cset)'}"
 		}
 		else {
 * Doesn't fit so right-align it on the next line
@@ -2094,7 +2080,7 @@ program define display_output
 		di as txt "{hline 37}" _c
 		di
 		di as txt "{ralign 7:Test} {c |}" _c
-		di as txt " {center 15:Conf. level}{center 22:{helpb twostepweakiv##cset:Conf. Set}}" _c
+		di as txt " {center 15:Conf. level}{lalign 22:{helpb twostepweakiv##cset:Conf. Set}}" _c
 		di
 		di as txt "{hline 8}{c +}{hline 33}" _c
 		di as txt "{hline 37}" _c
@@ -2158,7 +2144,7 @@ program define display_output
 		di as txt "{p}CLR distribution and p-values obtained by simulation (`e(clrsims)' draws).{p_end}"
 	}
 	if e(grid) & strpos("`e(citestlist)'", "lc") {
-		di as text "{p}LC test gamma_min is" %5.0g e(gamma_level) "%; distortion cutoff is " %5.0g e(gamma_hat) "%, obtained by 10^5 simulation draws.{p_end}"
+		di as text "{p}LC test gamma_min is" %5.0g e(gamma_level) "%; distortion cutoff is " %5.0f e(gamma_hat) "%  based on the given grid, obtained by 10^6 simulation draws.{p_end}"
 
 	}
 	local Ntext "`e(N)'"
@@ -2185,7 +2171,7 @@ program define display_output
 	di as txt "{p_end}"
 	di as txt "{p}`e(note1)' `e(note2)' `e(note3)'"
 	di as txt "{p_end}"
-	di as txt "{p}Wald statistic is based on `e(waldcmd)' estimation and is not robust to weak instruments.{p_end}"
+	di as txt "{p}Wald confidence set is based on `e(waldcmd)' estimates and is not robust to weak instruments.{p_end}"
 	if e(npd) {
 		di in red "{p}Some matrices are not positive definite, so reported tests should be treated with caution.{p_end}"
 	}
@@ -2205,9 +2191,6 @@ program define display_output
 	if e(pwendo_ct)!= .& e(pwendo_ct)>0 {				//  projection-based CIs to display
 		di
 		di "{helpb twostepweakiv##project:Projection-based inference:}"
-		di
-		di as txt "{ralign 5:Test}{center 20:Conf. level}{center 50:{helpb twostepweakiv##cset:Confidence Set}}"
-		di as txt "{hline 71}"
 
 		local pwendo_nlist	"`e(pwendo_nlist)'"
 		local wendo			"`e(wendo)'"
@@ -2216,18 +2199,21 @@ program define display_output
 		foreach vnum of local pwendo_nlist {
 			local vname		: word `vnum' of `wendo'
 			di as text "Variable: `vname'"
+			di
+			di as txt "{ralign 7:Test}{center 20:Conf. level}{lalign 22:{helpb twostepweakiv##cset:Confidence Set}}"
+			di as txt "{hline 71}"
 			foreach testname in `ptestlist' {
 				if "`e(p`vnum'_`testname'_cset)'"~="" {
-					di "{ralign 5:`name_`testname''}{center 20:`level_`testname''}{res}{center 50:`e(p`vnum'_`testname'_cset)'}"
+					di "`name_`testname''{center 20:`level_`testname''}{res}{lalign 22:`e(p`vnum'_`testname'_cset)'}"
 				}
 			}
 			di as txt "{hline 71}"
-			di "{ralign 5:Wald}{center 20:`level_wald'}{res}{center 50:`e(p`vnum'_wald_cset)'}"
+			di "{ralign 7:{helpb twostepweakiv##Wald:Wald}}{center 20:`level_wald'}{res}{lalign 22:`e(p`vnum'_wald_cset)'}"
 			di as txt "{hline 71}"
 			di as txt "{p} Wald confidence set for the parameter of interest is based on `e(waldcmd)' point estimate and its standard error, rather than grid search.{p_end}"
 			di as text "{p}LC test gamma_min is " ///
-				%5.0f e(gamma_level) "%; distortion cutoff is " %5.3f e(gamma_hat_p`vnum') "%, obtained by 10^5 simulation draws).{p_end}"
-
+				%5.0f e(gamma_level) "%; distortion cutoff is " %5.0f e(gamma_hat_p`vnum') "% based on the given grid, obtained by 10^6 simulation draws.{p_end}"
+			di
 		}
 
 	}
@@ -2297,11 +2283,8 @@ program define estimate_model, eclass
 	local legalestimator "2sls liml md2s cue"
 	local legal_cmd		: list cmd in legalcmd
 	local legal_estimator   : list cmd in legalestimator
-	if `legal_cmd' {
-		di as text "Estimating model for Wald tests using `cmd'..."
-	}
-	else if `legal_estimator' {
-		di as text "Estimating model using `cmd' estimator (MD approach)..."
+	if `legal_estimator' {
+		di as text "Estimating model using `cmd' estimator ..."
 	}
 	else {
 di as err "error - unsupported estimator `cmd'"
@@ -2978,13 +2961,7 @@ program define get_model_specs, sclass
 	local cmd		"`e(cmd)'"
 	local legal_cmd		: list cmd in legalcmd
 	local legal_estimator   : list cmd in legalestimator
-	if `legal_cmd' {
-		di as text "Parsing model for `cmd'..."
-	}
-	else if `legal_estimator' {
-		di as text "Parsing model for calculating `cmd' estimator..."
-	}
-	else {
+	if !`legal_estimator' {
 di as err "error - unsupported for command `e(cmd)'"
 		error 301
 	}
