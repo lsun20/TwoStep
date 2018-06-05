@@ -1,7 +1,7 @@
 // Generate simulation datasets (Z's, epsilon and u's)
 
 clear
-global monte_carlo_data "/Users/lsun20/Documents/monte_carlo_data"
+global monte_carlo_data "./monte_carlo_data/"
 forval j = 1/500{
 	dis "simulation is `j'"
 	
@@ -20,7 +20,7 @@ forval j = 1/500{
 	drawnorm epsilon u1 u2, n(500) cov(V) means(M)
 	
 	gen s = `j'
-	save "${monte_carlo_data}/data`j'.dta", replace
+	save "${monte_carlo_data}data`j'.dta", replace
 	}
 	
 }

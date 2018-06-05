@@ -12,7 +12,7 @@ mata: R = J(1,8,.) // initiate a mata matrix to store rejection results
 
 forval j =  1/2500{
 
-	use  "${monte_carlo_data}/data`j'.dta", clear
+	use  "${monte_carlo_data}data`j'.dta", clear
 	dis "file `j'"
 	generate Y = epsilon
 	generate X = u

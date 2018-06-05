@@ -44,13 +44,13 @@ label var first "Mean Kleibergen-Paap rk Wald F Statistic"
 
 line a_ar a_wald a_2sF first if norm<=0.11, ylabel(0(0.2)1 .85 .95, angle(0.2))   ytitle("pr(CS includes {&beta}=0)")  ///
 	lpattern("l" "-." "-" "_-") scheme(sj) 	yline(.85 .95 , lstyle(grid)) ///
-	legend(pos(5) ring(0) col(1) lab(3 "coverage after" "pretesting based on SY cutoff")) 
+	legend(pos(5) ring(0) col(1) lab(3 "coverage after" "pretesting based on Stock and Yogo (2005) cutoff")) 
 	
 graph export "./coverage_p1_het.eps", replace
 
 line a_lc2sls a_wald a_2sR first if norm<=0.11, ylabel(0(0.2)1 .85 .95, angle(0.2))    ytitle("pr(CS includes {&beta}=0)")   ///
 	lpattern("l" "-." "-" "_-") scheme(sj) ///
-	legend(pos(5) ring(0) col(1) lab(3 "coverage after" "pretesting based on whether distortion cutoff {&gamma}> 10")) ///
+	legend(pos(5) ring(0) col(1) lab(3 "coverage after" "pretesting based on whether distortion cutoff > 10")) ///
 	yline(.85 .95, lstyle(grid))
 
 graph export "./coverage_2sR_p1_het.eps", replace

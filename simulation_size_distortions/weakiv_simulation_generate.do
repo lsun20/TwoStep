@@ -2,9 +2,9 @@
 // p=1 k=10: one endogenous variable and ten instruments
 // simulation design follows the moderate endogeneity under heteroskedasticity
 // in the supplementary appendix to 
-// Andrews, Isaiah, "Valid Two-Step Identification-Robust Confidence Sets for GMM", Review of Economics and Statistics (Forthcoming).
+// Andrews, Isaiah, "Valid Two-Step Identification-Robust Confidence Sets for GMM", Review of Economics and Statistics (2018 May).
 clear
-global monte_carlo_data "./monte_carlo_p1_data"
+global monte_carlo_data "./monte_carlo_p1_data/"
 
 forval j = 1/2500{
 	dis "simulation is `j'"
@@ -58,7 +58,7 @@ forval j = 1/2500{
 	}
 	drop epsilon1 - u10
 	gen s = `j'
-	save "${monte_carlo_data}/data`j'.dta", replace
+	save "${monte_carlo_data}data`j'.dta", replace
 	}
 	
 }
