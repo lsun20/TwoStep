@@ -89,7 +89,7 @@ this may often be too small/large a grid to estimate the confidence sets.
 {p_end}
 
 {synopt:{opt gridmult(#)}}
-multiplier of Wald confidence-interval for grid. The default is {cmd:gridmult(2)}.
+multiplier of Wald confidence-interval for grid. The default is {cmd:gridmult(5)}.
 {p_end}
 {synopt:{opt gridmin(numlist)}}
 lower limit(s) for grid search (in dimensions corresponding to endogenous regressors).
@@ -186,7 +186,7 @@ including heteroskedastic-, autocorrelation-, and one- and two-way cluster-robus
 {pstd}
 {opt twostepweakiv} constructs confidence set for the coefficient on endogenous 
 variable of interest when there are multiple endogenous variables using a refined 
-projection method as in Andrews (Forthcoming). 
+projection method as in Andrews (2018). 
 There are several options available for models with 2 or more endogenous regressors.
 (a) The user can specify, using the {opt strong(.)} option,
 that some coefficients are strongly identified,
@@ -253,7 +253,7 @@ confidence sets for {opt 2sls} estimators based on {it:K_2sls} or {it:LC_2sls} t
 In the construction of the MD versions of these tests,
 any exogenous regressors are first partialled out.
 For further discussion of these tests,
-see Andrews (forthcoming),
+see Andrews (2018),
 Finlay and Magnusson (2009),
 Kleibergen (2002, 2005),
 Magnusson (2010),
@@ -264,7 +264,7 @@ The {it:LC} test combines the {it:K} and {it:AR} statistics.
 Unlike the {it:K} test,
 the {it:LC} test does not suffer from the problem of spurious power losses.
 It can also be used to construct valid two-step identification-robust
-confidence sets proposed by Andrews (forthcoming).
+confidence sets proposed by Andrews (2018).
 For more details on how to construct the {it:LC} or {it:LC_2sls} test, 
 see the documentation. The default behavior of {opt twostepweakiv} is to set the
  size of all tests at 5%. For valid two-step identification-robust
@@ -305,7 +305,7 @@ confidence sets for the listed weakly-identified endogenous variable.
 Unlike the conventional projection method, we alter test statistic 
 (specifically the {it:K} statistic) to focus inference for the listed weakly-identified endogenous variable. 
 Thus we refer to this method the refined projection method. 
-See Chaudhuri and Zivot (2011) and Andrews (Forthcoming) for a discussion and references.
+See Chaudhuri and Zivot (2011) and Andrews (2018) for a discussion and references.
 The refined projection-based confidence sets implemented by
 {opt twostepweakiv} require grid search.
 To get an accurate projection-based CI for a variable,
@@ -480,7 +480,7 @@ xx will be 1 or 2 numbers corresponding to the endogenous regressor(s){p_end}
 {pstd}
 {opt twostepweakiv} builds on and extends the command {helpb weakiv} by Finlay, Magnusson and Schaffer  (2013).
 The main differences and extensions are:
-(a) construct valid two-step identification-robust confidence sets based on Andrews (forthcoming) for MD models;
+(a) construct valid two-step identification-robust confidence sets based on Andrews (2018) for MD models;
 (b) implement linear combination test based on Andrews (2016) and support K test with inefficient weight matrix;
 (c) support for MD versions of estimators and tests;
 (d) support for refined projection-based inference;
@@ -499,11 +499,11 @@ Conditional Linear Combination Tests for Weakly Identified Models.
 {it:Econometrica} 84(6):21552182.
 {p_end}
 
-{marker A2017}{...}
+{marker A2018}{...}
 {phang}
-Andrews, I.  Forthcoming.
+Andrews, I.  2018.
 Valid Two-Step Identification-Robust Confidence Sets for GMM.
-{it:Review of Economics and Statistics}. 
+{it:Review of Economics and Statistics} 100 (2) :337-348.
 {p_end}
 
 {marker AR1949}{...}
@@ -635,7 +635,7 @@ Tests and confidence sets with correct size when instruments are potentially wea
 {pstd}{opt twostepweakiv} is not an official Stata command. It is a free contribution
 to the research community, like a paper. Please cite it as such: {p_end}
 
-{phang}Sun, L., 2017.
+{phang}Sun, L., 2018.
 twostepweakiv: valid two-step identification-robust confidence sets
 for instrumental-variable (IV) estimation of linear models.
 {browse "https://github.com/lsun20/TwoStep":https://github.com/lsun20/TwoStep}.
@@ -644,12 +644,6 @@ for instrumental-variable (IV) estimation of linear models.
 
 	Liyang Sun, MIT, USA
 	lsun20@mit.edu
-
-
-{title:Also see}
-
-{p 4 14 2}
-Article:  {it:Stata Journal}, volume #, number #: {browse "http://www.stata-journal.com/article.html?article=st####":st####},{break}
 
 
 {p 7 14 2}
