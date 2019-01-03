@@ -1,10 +1,12 @@
-*! twostepweakiv 1.0.01 01Jan2018
+*! twostepweakiv 1.0.02 03Jan2019
 *! author: Sun 
-*! version: 1.0.01	01Jan2018
+*! version: 1.0.02 03Jan2019
 * Usage:
 * twostepweakiv <estimator> <eqn>, <options>         = estimate equation as model=linear
 * Version notes:
 * 1.0.01	01Jan2018.	First complete working versionm largely based on Finlay-Magnusson-Schaffer's weakiv
+* 1.0.02	03Jan2019.	Fix code for just-identified models and report distortion cutoff as well
+
 
 program define twostepweakiv, eclass byable(recall) sortpreserve
 	version 11.2
@@ -839,7 +841,6 @@ di as err "         weakiv rk stat df=`rk_df'; ranktest id stat df=`idstat_df'
 		local points_descript	"`r(points_descript)'"
 		local points			"`r(points)'"					//  total number of points in grid, or empty
 		local gridpoints		"`r(gridpoints)'"				//  numlist of grid points in each dimension; overwrites default
-
 		tempname citable										//  set local name at top level so will persist until program exit
 														//  same name is used for Mata matrix
 		construct_citable,				///
@@ -1098,7 +1099,7 @@ di as err "         weakiv rk stat df=`rk_df'; ranktest id stat df=`idstat_df'
 	ereturn scalar	sendo_ct			=`nsendog'		//  #strong endog
 	ereturn scalar	tinexog_ct			=`ntinexog'		//  #exogenous regressors included in tests
 	ereturn scalar	exexog_ct			=`nexexog'		//  #excluded exogenous (IVs)
-	ereturn local	cmd 				"weakiv"
+	ereturn local	cmd 				"twostepweakiv"
 	ereturn local	waldcmd				"`waldcmd'"
 	ereturn local	depvar				"`depvar'"
 	ereturn local	endo				"`endo'"
@@ -1118,7 +1119,7 @@ di as err "         weakiv rk stat df=`rk_df'; ranktest id stat df=`idstat_df'
 	ereturn scalar	ar_level			=`ar_level'
 	ereturn scalar	ar_df				=`ar_df'
 
-	if `overid' {
+
 		//ereturn scalar	kjj_level		=`kjj_level'
 		//ereturn scalar	kjk_level		=`kjk_level'
 		//ereturn scalar	kj_level		=`kj_level'
@@ -1135,7 +1136,7 @@ di as err "         weakiv rk stat df=`rk_df'; ranktest id stat df=`idstat_df'
 
 		//ereturn scalar	clr_level		=`clr_level'
 
-	}
+
 	if `testid' {
 		ereturn scalar	idstat_df		=`idstat_df'
 		ereturn scalar	idstat_p		=`idstat_p'
@@ -1169,7 +1170,7 @@ di as err "         weakiv rk stat df=`rk_df'; ranktest id stat df=`idstat_df'
 	if `ci' {
 		ereturn local	wald_cset		"`wald_cset'"
 		ereturn local	ar_cset			"`ar_cset'"
-		if `overid' {
+//		if `overid' {
 			ereturn local	kj_cset		"`kj_cset'"
 			ereturn local	j_cset		"`j_cset'"
 			ereturn local	k_cset		"`k_cset'"
@@ -1177,7 +1178,7 @@ di as err "         weakiv rk stat df=`rk_df'; ranktest id stat df=`idstat_df'
 			ereturn local	lc_2sls_cset	"`lc_2sls_cset'"
 			ereturn local	lc_cset		"`lc_cset'"
 			ereturn local	clr_cset	"`clr_cset'"
-		}
+//		}
 	}
 
 	*ereturn local	testlist			"`testlist'" // redundant with citestlist
@@ -1203,7 +1204,7 @@ di as err "         weakiv rk stat df=`rk_df'; ranktest id stat df=`idstat_df'
 
 			ereturn local p`vnum'_wald_cset			"`p`vnum'_wald_cset'"
 			ereturn local p`vnum'_ar_cset			"`p`vnum'_ar_cset'"
-			if `overid' {
+//			if `overid' {
 				ereturn local p`vnum'_kj_cset			"`p`vnum'_kj_cset'"
 				ereturn local p`vnum'_j_cset			"`p`vnum'_j_cset'"
 				ereturn local p`vnum'_k_cset			"`p`vnum'_k_cset'"
@@ -1211,7 +1212,7 @@ di as err "         weakiv rk stat df=`rk_df'; ranktest id stat df=`idstat_df'
 				ereturn local p`vnum'_lc_2sls_cset		"`p`vnum'_lc_2sls_cset'"
 				ereturn local p`vnum'_lc_cset		"`p`vnum'_lc_cset'"
 				ereturn local p`vnum'_clr_cset			"`p`vnum'_clr_cset'"
-			}
+//			}
 			ereturn scalar gamma_hat_p`vnum' = `gamma_hat`vnum''		// distortion cutoff for projection test
 		}
 		ereturn local	pwendo			"`pwendo'"
@@ -2649,7 +2650,8 @@ di as err "ptestlist option error - only allow LC and K tests with same weight m
 		local testlist  "`citestlist'"									//  j and kj CIs not available for closed-form method
 		local ptestlist			""											//  projection-based inference unavailable if closed-form
 	}
-	else if `overid' {
+
+	else {
 		if `nwendog' == 1 {
 	* if #wendog=1, then  ptestlist is empty
 			if "`citestlist'" == "" {
@@ -2666,7 +2668,7 @@ di as err "ptestlist option error - only allow LC and K tests with same weight m
 		local testlist   "`citestlist'"
 		local ptestlist			""
 			if "`project'" != "" {
-di as err "projection option error - there is only one weak endogenous variable."
+di as err "projection option error - there is only one endogenous variable."
 di as err "to calculate confidence set, you do not need to specify project()."
 			exit 198
 			}
@@ -2688,7 +2690,7 @@ di as err "to calculate confidence set, you do not need to specify project()."
 		local testlist  "`citestlist'"
 		* if project() is empty, prompt the user to specify
 			if "`project'" == "" & "`citestlist'" == "" & `overid' {
-di as err "project option error - there are more than one weak endogenous variables."
+di as err "project option error - there are more than one endogenous variables."
 di as err "either specify project() to calculate marginal confidence sets (recommended)," 
 di as err "or specify citestlist() to calculate full confidence sets." 
 
@@ -2771,18 +2773,6 @@ di as err "or specify citestlist() to calculate full confidence sets."
 * clrsims=-1 => don't use sim method, use Mikusheva-Poi method for CLR p-value
 * clrsims=0  => don't use simulation method, no p-value provided; or CLR test is not requested
 * clrsims>0  => use simulation method 
-* And above overridden if exactly-ID or subset AR, when only AR is available
-	if ~`overid' | `ncsendog' {
-dis as text "exactly-identified model: only AR test is conducted"
-		local testlist		"ar"
-	 	local citestlist	"ar"
-	 	local ptestlist		"ar"
-		if `usegrid' {
-			local gridcols				///
-							ar_chi2		///
-							ar_p
-		}
-	}
 
 * Grid settings
 	if `usegrid' {
@@ -4618,7 +4608,6 @@ di as err "error: missing saved grid e(citable)"
 		foreach testname in `citestlist' {
 			local `testname'_cset "`r(`testname'_cset)'"
 		}
-
 * Also get and save Wald CI as local macro
 		get_ci_from_vcv,				///
 			wbeta(`wbeta')				///
@@ -5046,14 +5035,14 @@ program define get_gridlist, rclass
 			exit 198
 		}
 		if `points'>1 {
-			local gridinterval = 1*(`gridmax'-`gridmin')/(`points'-1)	// CHANGE: why multiply by .999999999 before?
+			local gridinterval = .999999999*(`gridmax'-`gridmin')/(`points'-1)	// multiply by .999999999 so the interval doesnt take up end points in numlist
 			local grid "`gridmin'(`gridinterval')`gridmax'"						//  grid is in numlist form
 			if `usecue' & `numlimits'==2	{									/// add CUE to grid
 				//& `wbeta'>`gridmin' & `wbeta'<`gridmax' { //always add CUE point //  ...but only if an interior point
 				local grid		"`grid' `wbeta'"								//  wbeta is CUE beta
 				local points	=`points'+1										//  and add 1 to points
 			}
-			numlist "`grid'", sort												//  sort required in case CUE beta appended at end
+			numlist "`grid'", sort	 								            //  sort required in case CUE beta appended at end
 			local gridlist	"`r(numlist)'"										//  gridlist is actual list of #s to search over
 		}
 		else if `points' == 1 & `gridmax' == `gridmin' {								// special case of 1 gridpoint because min=max
@@ -5452,7 +5441,6 @@ timer on 4
 		local lc_crit = r(lc_crit)
 		local a_min_p = r(a_min_p)
 		local lc_crit_p = r(lc_crit_p)
-
 * cnames = column names for grid
 * leading columns in grid: nulls and strong betas
 		forvalues i=1/`nwendog' {
@@ -5554,10 +5542,14 @@ timer on 4
 			local k_df		= `nendog' - `nsendog'
 			local j_df		= `nexexog'-`nendog'
 			// simulation of (1+a)*chi2_p + a*chi2_k-p
-										
 			mata: `K_size'=rchi2(`m',1,`k_df')
-			mata: `J_size'=rchi2(`m',1,`j_df')
-											//  restore seed to previous value
+			if 	(`j_df' > 0) {					
+				mata: `J_size'=rchi2(`m',1,`j_df')
+			}
+			else {
+				mata: `J_size'=J(`m',1,0)
+			}
+			
 			mata: `lc_sim'	= (1+`a_max')*`K_size' + `a_max'*`J_size'
 			mata: `pr_k_df'	= sum(`lc_sim' :<= `invchi2_k_df')/`m'	
 			
@@ -6238,6 +6230,7 @@ real matrix collapse_citable(									///
 							)
 {
 	
+
 	lc_col			=strtoreal(tokens(lc_cols)) // 0 is the case that only AR test is listed - eventually do AR with rejection, too?
 	gridcols		=strtoreal(tokens(colsvec))
 	levels			=strtoreal(tokens(levelsvec))
@@ -6311,6 +6304,7 @@ program get_ci_from_table, rclass
 * "collapsed" = rows which are not on either side of CI border for any test are dropped.
 * CIs are then constructed by looping through Stata rejections table `rtable'.
 
+//dis "testlist is 	`testlist'"
 	local hasrejections		=("`hasrejections'"~="")        	//  Convert to boolean
 	tempname rtable								//  table of collapsed rejections
 										//  name use for both Mata and Stata objects
@@ -6353,8 +6347,6 @@ program get_ci_from_table, rclass
 		if "`lc_cols'" == "" { // if none of the rejection test is on the list (i.e. only AR test), then set to 0
 			local lc_cols 		"0"
 			}
-		//dis "rtestlist `rtestlist' testlist is 	`testlist'"
-		//dis "lc_cols is `lc_cols' gridcols is `gridcols'"
 		
 		mata: `rtable' = collapse_citable(`p', "`lc_cols'", "`gridcols'", "`testlevels'")	//  create table of rejections and collapse
 																				//  (delete unnecessary rows)
@@ -6508,7 +6500,12 @@ void compute_a_min(
 			rseed(12345)										//  set seed (replicability)
 			crit_sims = 10^5
 			K_size	= rchi2(crit_sims,1,k_df)
-			J_size	= rchi2(crit_sims,1,nexexog-nendog)
+			if (nexexog > nendog) {
+				J_size	= rchi2(crit_sims,1,nexexog-nendog)
+			}
+			else {
+				J_size = J(crit_sims,1,0)
+			}
 			target_quant = invchi2(k_df,alpha/100)
 			v = simulate_a_min(K_size,J_size,target_quant,a/100, gamma/100)
 			st_numscalar("r(a_min)",v[1,1])
@@ -7707,7 +7704,8 @@ real matrix project_test(										///
 	gridcols		=strtoreal(tokens(colsvec))
 	levels			=strtoreal(tokens(levelsvec))
 	rtable			= (100*(*p)[.,gridcols]) :< (100 :- levels)	//  missings => zeros (thus included in CI)
-
+//printf("hellow")
+//lc_col
 	if (lc_col[1,1]>0) {
 		rtable			= (*p)[.,vnum], rtable, (*p)[., lc_col]	//  append column 1 with grid nulls for sorting and last column LC_2slsp`vnum'_r or LCp`vnum'_r
 	}
@@ -7720,7 +7718,10 @@ real matrix project_test(										///
 	pointsi=gridpoints[1,vnum]						//  points in grid for variable vnum
 	blocksize=points/pointsi
 
-
+//printf("hellow")
+//points
+//blocksize
+//rtable
 	 for (i=1; i<=pointsi; i++) {
 		block = rtable [ ((i-1)*blocksize+1)::(i*blocksize), (2..cols(rtable)) ]
 		pcitablei = floor(colsum(block) * 1/blocksize)							//  * 1/blocksize means cols with all ones																	//  will sum=1 and other cols will sum<1.
@@ -7728,9 +7729,8 @@ real matrix project_test(										///
 		pcitable = pcitable \ (rtable[(i*blocksize),1] , pcitablei)				//  and append with null to pcitable
 
 	}
-
 	st_matrix("r(pcitable)", pcitable)
-
+//pcitable
 	return(pcitable)
 }
 end

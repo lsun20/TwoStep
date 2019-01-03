@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 1.1.01  9feb2018}{...}
+{* *! version 1.1.02  3Jan2019}{...}
 {cmd:help twostepweakiv}
 {hline}
 
@@ -238,10 +238,6 @@ More details can be found in {helpb ivreg2}.
 {opt twostepweakiv} calculates minimum distance (MD)
 versions of weak-instrument-robust tests of the coefficients
 on the endogenous variables in a linear instrumental variables (IV) estimation.
-In an exactly-identified model where the number of instruments
-equals the number of endogenous regressors,
-it reports the Anderson-Rubin ({it:AR}) test statistic (the {it: K} statistic 
-reduces to {it:AR}, while the {it:J} statistic is identically zero).
 When the IV model contains more instruments than endogenous regressors
 (the model is overidentified),
 {opt twostepweakiv} can also conduct the {it:K} test and a linear combination
