@@ -920,7 +920,6 @@ di as err "         weakiv rk stat df=`rk_df'; ranktest id stat df=`idstat_df'
 		forvalues i=1/`nwendog' {		
 			local gamma_hat`i' = r(gamma_hat`i')			// distortion cutoff for projection test
 		}
-
 * Summary:
 * Mata matrix `citable' has full CI table (no size limit)
 * Stata macro `citable_cnames' has column names
@@ -2689,8 +2688,8 @@ di as err "to calculate confidence set, you do not need to specify project()."
 			}
 		local testlist  "`citestlist'"
 		* if project() is empty, prompt the user to specify
-			if "`project'" == "" & "`citestlist'" == "" & `overid' {
-di as err "project option error - there are more than one endogenous variables."
+			if "`project'" == "" & "`citestlist'" == "" {
+di as err "projection option error - there are more than one endogenous variables."
 di as err "either specify project() to calculate marginal confidence sets (recommended)," 
 di as err "or specify citestlist() to calculate full confidence sets." 
 
